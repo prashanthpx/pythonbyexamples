@@ -1,0 +1,98 @@
+# ===========================
+#   PYTHON / MAC / VS CODE
+# ===========================
+
+# --- Python bytecode ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Virtual environments ---
+venvs/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# --- Jupyter notebooks checkpoints ---
+.ipynb_checkpoints/
+
+# --- Distribution / packaging ---
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- PyInstaller ---
+# Usually contains build scripts, logs, etc.
+*.manifest
+*.spec
+
+# --- Unit test / coverage reports ---
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# --- Type checking / linting ---
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# --- IDE / editor files ---
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# --- OS-specific ---
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# --- Logs / temp files ---
+*.log
+*.tmp
+*.temp
+
+# --- Local environment files ---
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# --- Misc ---
+*.bak
+*.swp
+*.swo
+*~
+
+# ===========================
+#   END OF FILE
+# ===========================
+
