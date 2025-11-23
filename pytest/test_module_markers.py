@@ -32,5 +32,3 @@ test_module_markers.py::test_module_level_marker_two PASSED
 ==================================================== 2 passed in 0.01s ====================================================
 '''
 
-    assert "py" in "pytest"
-

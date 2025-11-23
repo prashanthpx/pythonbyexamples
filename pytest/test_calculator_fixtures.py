@@ -2,7 +2,7 @@ import pytest
 import calculator
 
 
-# Phase 3 – Fixtures: reusing a calculator instance
+# Fixtures: reusing a calculator instance
 
 
 @pytest.fixture

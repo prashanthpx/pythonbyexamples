@@ -330,6 +330,10 @@ def test_contains_substring():
     text = "learning pytest is fun"
     assert string_utils.contains_substring(text, "pytest")
     assert string_utils.contains_substring(text, "learn")
+    # `assert not ...` is the opposite of `assert ...`.
+    # Here we are explicitly checking that the substring is *not* present.
+    # This kind of negative test is very common when you want to prove
+    # something does *not* happen.
     assert not string_utils.contains_substring(text, "django")
 
 
@@ -395,20 +399,141 @@ In this section we will:
 
 We will use the existing files in `practice/pytest`.
 
+Here is a small first fixture example from `test_calculator_fixtures.py`:
+
+```python
+import pytest
+import calculator
+
+
+# 1. Define a fixture that returns reusable test data
+@pytest.fixture
+def calculator_values():
+    # Pytest will call this *for you* whenever a test asks for the
+    # `calculator_values` fixture. The returned dict is what the test
+    # receives as its argument.
+    return {"a": 10, "b": 5, "negative": -3, "zero": 0}
+
+
+# 2. Ask for the fixture by name as a function argument
+#    Pytest sees `calculator_values` here, matches it to the fixture
+#    above, calls the fixture, and passes the returned dict in.
+def test_add_with_fixture(calculator_values):
+    # 3. Inside the test, `calculator_values` is now just a normal
+    #    Python variable holding that dict. This assignment creates a
+    #    shorter local name `values` that points to the same dict.
+    values = calculator_values
+
+    # 4. Use the shared data from the fixture when calling the real
+    #    code you want to test.
+    assert calculator.add(values["a"], values["b"]) == 15
+```
+
+A simple way to think about this is:
+
+- The **fixture name** is the function name `calculator_values` decorated with `@pytest.fixture`.
+- The **test argument** `calculator_values` tells pytest “I need that fixture here”.
+- Pytest does the call `calculator_values()` behind the scenes and injects the
+  returned dict into the test.
+- `values = calculator_values` is plain Python: it just creates a nicer local
+  alias for the same dict; it is not special to pytest.
+
+Run it with:
+
+```bash
+pytest -v test_calculator_fixtures.py
+```
+
+Example output (shortened):
+
+```text
+test_calculator_fixtures.py::test_add_with_fixture PASSED
+...
+```
+
+
 ## 5. Markers and selecting which tests to run
 
 Once you have more tests, you rarely run **all** of them all the time.
 Markers let you label tests (slow, api, smoke, etc.) and then select or
 skip them from the command line.
 
-In this section we will:
+Here is a minimal markers example from `test_markers.py` that uses:
 
-- Use custom markers like `@pytest.mark.slow` and `@pytest.mark.api`.
-- Use built-in markers like `@pytest.mark.skip`, `@pytest.mark.skipif`,
-  `@pytest.mark.xfail`.
-- Select tests with `pytest -m "marker"` and `pytest -k "substring"`.
-- See how module-level `pytestmark` works.
-- Mention how to register custom markers in `pytest.ini`.
+- a **custom marker** `slow` (registered in `pytest.ini`), and
+- two built-in markers: `skip` and `xfail`.
+
+```python
+import pytest
+
+
+# Custom marker: "slow" (registered in pytest.ini)
+@pytest.mark.slow
+def test_slow_example():
+    """A dummy 'slow' test, marked so we can select it with -m slow."""
+    assert 1 + 1 == 2
+
+
+# Built-in marker: always skip this test
+@pytest.mark.skip(reason="demonstration of a skipped test")
+def test_skipped_example():
+    """This test is always skipped and never actually runs."""
+    assert 1 == 2  # would fail if it ran, but it is skipped
+
+
+# Built-in marker: expected failure
+@pytest.mark.xfail(reason="demonstration of expected failure")
+def test_expected_failure_example():
+    """This test is expected to fail (reported as XFAIL instead of FAIL)."""
+    assert 2 + 2 == 5
+```
+
+The custom marker `slow` is defined in `pytest.ini` like this:
+
+```ini
+[pytest]
+markers =
+    assertion: tests that exercise basic assertion behavior
+    slow: tests that are slow or optional
+    api: tests that call external or HTTP APIs
+    db: tests that touch the database or persistence layer
+```
+
+### Running only tests with a given marker (`-m`)
+
+From inside the `practice/pytest` directory, run only the `slow` test from this
+file with:
+
+```bash
+pytest -v test_markers.py -m slow
+```
+
+You should see output like:
+
+```text
+test_markers.py::test_slow_example PASSED
+
+======================================= 1 passed, 2 deselected in 0.01s ========================================
+```
+
+Here `-m slow` means:
+
+- "Run only tests that have the marker `slow`".
+- Tests without this marker (`test_skipped_example`, `test_expected_failure_example`) are *deselected*.
+
+To run the whole file normally, without selection, you can still do:
+
+```bash
+pytest -v test_markers.py
+```
+
+In later subsections we build on this with:
+
+- Module-level markers using `pytestmark`.
+- Conditional skipping with `@pytest.mark.skipif`.
+- Runtime skip/xfail using `pytest.skip(...)` and `pytest.xfail(...)`.
+- Selecting tests with more complex expressions, e.g. `pytest -m "slow or api"`.
+- Registering custom markers in `pytest.ini` (as shown above).
 
 ## 6. Parametrization overview
 
