@@ -4,7 +4,7 @@ This document is a **living guide** to the pytest examples in this `practice/pyt
 
 - Understand the tests you already wrote
 - Learn pytest concepts step by step (beginner → intermediate → advanced)
-- Add new example tests in phases as you learn
+- Add new example tests as you learn (this guide grows with you)
 
 ---
 
@@ -211,30 +211,14 @@ test_eg.py::testAssertfail FAILED
 
 ---
 
-## 3. Phase Plan: Learning Pytest Step by Step
+## 3. Testing real code: calculator and string utilities
 
-We’ll grow your tests and this guide in **phases**. Here’s the roadmap.
+In Section 2 you wrote your very first tests using plain `assert` on numbers
+and simple functions.
 
-### Phase 1 – Basics (you are here)
-
-Goals:
-- Understand how pytest discovers tests
-- Write simple tests using `assert`
-- See what passing and failing tests look like
-
-Next examples to add in this phase (we can implement these next):
-- Tests with **comparisons**: `==`, `!=`, `<`, `>`
-- Tests for **strings**: membership (`"py" in "pytest"`), equality
-- Tests for **lists**: length, membership, order
-
-### Phase 2 – Grouping and Structuring Tests
-
-In this phase, you start testing **real Python code** (a small calculator module) instead of only literals.
-
-Goals:
-- Organize code into a **module** and tests into **separate test files**
-- Call real functions from your tests
-- Keep the code simple so you can focus on pytest
+The next step in the fundamentals is to point tests at **real Python code in
+modules** instead of only literals. We keep the code tiny so you can focus
+on pytest itself, not business logic.
 
 We created two new files in `practice/pytest`:
 
@@ -394,46 +378,52 @@ test_calculator.py::test_multiply_by_zero_and_one PASSED
 
 This pattern—**small, focused module + matching `test_*.py` file**—is very common in real projects.
 
-### Phase 3 – Fixtures (Setup and Teardown)
+## 4. Fixtures: sharing setup and teardown
 
-Goals:
-- Avoid repetition by using **fixtures**
-- Understand fixture scopes (function, module, etc.)
-- Learn simple teardown via `yield` in fixtures
+So far each test has created its own data inline. As your test suite grows,
+that becomes repetitive and harder to change.
 
-Planned topics:
-- `@pytest.fixture` basics
-- Function‑scope fixtures (and brief note on other scopes)
-- Sharing setup data/objects via fixtures
-- Simple teardown with `yield`
+Pytest fixtures solve this by letting you **declare reusable setup/teardown
+functions** that tests can depend on.
 
-### Phase 4 – Markers and Selection
+In this section we will:
 
-Goals:
-- Control **which** tests run and how they are treated
-- Use markers to skip/xfail tests or group them logically
+- Use `@pytest.fixture` to create reusable test data.
+- See how fixtures run **before and after** each test.
+- Share fixtures across multiple files with `conftest.py`.
+- Briefly mention fixture scope (function vs module, etc.).
 
-Planned topics:
-- `@pytest.mark.<name>` on individual tests
-- Module‑level `pytestmark`
-- Built‑in markers: `@pytest.mark.skip`, `@pytest.mark.skipif`, `@pytest.mark.xfail`
-- Runtime skipping and xfail: `pytest.skip()`, `pytest.xfail()`
-- Marker selection with `pytest -m ...`
-- Registering custom markers in `pytest.ini`
+We will use the existing files in `practice/pytest`.
 
-### Phase 5 – Parametrization
+## 5. Markers and selecting which tests to run
 
-Goals:
-- Cover many input/output cases with fewer tests
-- Write **data‑driven** tests
+Once you have more tests, you rarely run **all** of them all the time.
+Markers let you label tests (slow, api, smoke, etc.) and then select or
+skip them from the command line.
 
-Planned topics:
-- `@pytest.mark.parametrize` with one parameter
-- Multiple parameters in one test
-- Using `ids=` for readable parameter names
-- Combining parametrization with fixtures
+In this section we will:
 
-## 7. Phase 5 – Parametrization in Practice
+- Use custom markers like `@pytest.mark.slow` and `@pytest.mark.api`.
+- Use built-in markers like `@pytest.mark.skip`, `@pytest.mark.skipif`,
+  `@pytest.mark.xfail`.
+- Select tests with `pytest -m "marker"` and `pytest -k "substring"`.
+- See how module-level `pytestmark` works.
+- Mention how to register custom markers in `pytest.ini`.
+
+## 6. Parametrization overview
+
+Parametrization lets you cover many input/output cases with fewer tests by
+passing a table of values into one test function.
+
+This section is a short **concept overview**. The detailed, runnable examples
+are in the next section.
+
+- `@pytest.mark.parametrize` with one parameter.
+- Multiple parameters in one test.
+- Using `ids=` for readable parameter names.
+- Combining parametrization with fixtures.
+
+## 7. Parametrization in practice
 
 ### 7.1. Single-parameter tests with `@pytest.mark.parametrize` (`test_parametrize_basic.py`)
 
@@ -444,7 +434,7 @@ values. We created `test_parametrize_basic.py`:
 import pytest
 
 
-# Phase 5 – Parametrization: single-parameter example
+# Parametrization: single-parameter example
 
 
 @pytest.mark.parametrize("number", [1, 2, 5, 10])
@@ -495,7 +485,7 @@ import pytest
 import calculator
 
 
-# Phase 5 – Parametrization: multiple arguments and ids
+# Parametrization: multiple arguments and ids
 
 
 @pytest.mark.parametrize(
@@ -571,7 +561,7 @@ import pytest
 import calculator
 
 
-# Phase 5 – Parametrization: combining fixtures with parametrize
+# Parametrization: combining fixtures with parametrize
 
 
 @pytest.fixture
@@ -630,7 +620,7 @@ import pytest
 import calculator
 
 
-# Phase 5 – Parametrization: row-level marks with pytest.param
+# Parametrization: row-level marks with pytest.param
 
 
 @pytest.mark.parametrize(
@@ -689,7 +679,7 @@ We created `test_parametrize_indirect.py`:
 import pytest
 
 
-# Phase 5 – Parametrization: indirect parametrization via fixtures
+# Parametrization: indirect parametrization via fixtures
 
 
 @pytest.fixture
@@ -741,13 +731,12 @@ The full pytest output is stored at the bottom of
 
 
 
-### Phase 6 – Exceptions and Failure Control
+## 9. Exceptions and failure control
 
-Goals:
-- Test for exceptions explicitly
-- Understand and control different failure types
+In this section you learn how to **test for exceptions** and how to control different
+failure types, including expected failures.
 
-In this phase we will:
+We will:
 - Use `with pytest.raises(...)` (with and without `match=`) to assert that exceptions are raised.
 - Force failures explicitly with `pytest.fail(...)`.
 - Use `@pytest.mark.xfail(..., strict=...)` to control how expected failures and unexpected passes are reported.
@@ -757,7 +746,7 @@ In this phase we will:
 
 #### 6.1. Using `pytest.raises` to test exceptions (`test_exceptions_failure_control.py`)
 
-We created `test_exceptions_failure_control.py` for this phase. The first two tests
+We created `test_exceptions_failure_control.py` for this section. The first two tests
 use `pytest.raises` to assert that specific exceptions are raised.
 
 ```python
@@ -1021,12 +1010,13 @@ The full output is stored at the bottom of
 
 ---
 
-### Phase 7 – Shared Fixtures and `conftest.py`
+## 10. Shared fixtures and `conftest.py`
 
-Goals:
-- Share fixtures and configuration across many test files
+Fixtures often need to be reused **across many files**. Pytest's special
+`conftest.py` files let you define fixtures once and share them with all tests
+in a directory tree.
 
-In this phase we will:
+In this section we will:
 - See how pytest automatically discovers `conftest.py` files.
 - Move common fixtures into `conftest.py` so they are visible to many tests.
 - Demonstrate how multiple test modules can share the same fixtures.
@@ -1313,17 +1303,18 @@ The full `pytest -vs nested_conftest_pkg` output is embedded at the bottom of
 
 ---
 
-### Phase 8 – Mocking with pytest (`pytest-mock` / `mocker`)
+## 11. Mocking with pytest: monkeypatch and mocker
 
-Goals:
-- Isolate code under test from external dependencies
-- Learn to patch functions/methods using `mocker`
+Sometimes you want to test code that talks to **external systems** (random
+number generators, environment variables, HTTP services, databases, etc.)
+without actually calling those systems.
 
-Planned topics:
-- Installing and enabling `pytest-mock`
-- Using the `mocker` fixture: `mocker.patch`, `mocker.patch.object`, `mocker.spy`
-- Asserting calls and arguments on mocks
-- Brief comparison with the built‑in `monkeypatch` fixture
+In this section we will:
+- Use pytest's built-in **`monkeypatch`** fixture to patch functions and
+environment variables.
+- Use the `pytest-mock` plugin's **`mocker`** fixture to patch and spy on
+functions and methods.
+- Assert that dependencies were called with the expected arguments.
 
 #### 8.1. Deterministic tests with the built-in `monkeypatch` fixture (`test_mock_monkeypatch.py`)
 
@@ -1346,7 +1337,7 @@ import random
 import pytest
 
 
-# Phase 8 – Mocking: built-in monkeypatch fixture
+# Mocking: built-in monkeypatch fixture
 
 
 def roll_two_dice() -> int:
@@ -1437,7 +1428,7 @@ import calculator
 import string_utils
 
 
-# Phase 8 – Mocking with pytest-mock: the `mocker` fixture
+# Mocking with pytest-mock: the `mocker` fixture
 
 # If pytest-mock (the plugin that provides the `mocker` fixture) is not
 # installed, this entire module will be skipped instead of failing.
@@ -1613,20 +1604,21 @@ configuration. Here we simply show how to use it when available.
 ---
 
 
-### Phase 9 – Putting It All Together (Mini Project)
+## 12. Mini project: putting it all together
 
-Goals:
-- Combine fixtures, markers, parametrization, exceptions, `conftest.py`, and mocking
-- See how a “pytest expert” structures tests in a small project
+As a final step, we build a tiny **checkout mini‑project** inside a
+separate package and write tests that use many pytest features together.
 
-Planned topics:
-- A small mini‑project with real‑looking modules
-- Tests that use multiple features together
-- Practical tips for organizing tests and debugging failures
+In this section you will see, in one place:
+- Fixtures
+- `conftest.py`
+- Parametrization
+- Markers and test selection
+- Exceptions and failure control
+- Mocking with `monkeypatch` / `mocker`
 
-### Phase 9 – Putting It All Together (Mini Project)
 
-For the final phase we build a tiny **checkout mini‑project** inside a
+For this mini‑project we build a tiny **checkout example** inside a
 separate package and then write tests that use many pytest features
 together.
 
@@ -1881,7 +1873,7 @@ You can visualize the mini‑project like this:
 ```text
           +----------------+
           |  test_*.py    |
-          | (Phase 9)     |
+          | mini_project  |
           +--------+-------+
                    |
                    |  uses fixtures from
@@ -2016,7 +2008,7 @@ pytest -vs mini_project
   pytest -vs mini_project -m db
   ```
 
-These commands pull together everything from the previous phases:
+These commands pull together everything from the previous sections:
 
 - locating tests in a subpackage,
 - sharing fixtures via a local `conftest.py`,
@@ -2026,10 +2018,10 @@ These commands pull together everything from the previous phases:
 - and tagging tests with markers so you can run **just the slice you care
   about**.
 
-#### 9.9. Phase 9 recap – pytest concepts in the mini‑project
+#### 9.9. Mini‑project recap – pytest concepts used together
 
 The mini‑project is small on purpose, but it ties together many of the
-features from earlier phases:
+features from earlier sections:
 
 - **Fixtures** – `simple_order`, `configured_gateway`, `variable_size_order`,
   and `default_rules` keep tests readable and DRY.
@@ -2044,7 +2036,7 @@ features from earlier phases:
 - **Monkeypatching** – `monkeypatch.setattr`, `setenv`, and `delenv` let you
   isolate the payment gateway and environment from the tests.
 
-If you understand how all of these pieces work together in Phase 9, you have
+If you understand how all of these pieces work together in this miniproject, you have
 most of the tools you need to write robust pytest suites for real projects.
 
 
@@ -2052,19 +2044,10 @@ most of the tools you need to write robust pytest suites for real projects.
 
 ---
 
-## 4. How We Will Evolve This File
-
-As you add new test files and examples under `practice/pytest`:
-
-- We will **update this `pytestnotes.md`** to explain each new example.
-- Each phase will get its own section with:
-  - The code examples
-  - Explanations of what each test is teaching
-  - Notes on real-world usage
 
 ---
 
-## 5. Phase 1 – Basic Assertions: `test_assertions_basic.py`
+## 2. Basic assertions with pytest: `test_assertions_basic.py`
 
 We created a new file: `test_assertions_basic.py`.
 
@@ -2204,12 +2187,12 @@ def test_boolean_truthiness():
 
 ---
 
-## 6. Phase 3 – Fixtures: Reusing Setup with `@pytest.fixture`
+## 8. Fixtures: reusing setup with `@pytest.fixture`
 
-For the next phase, we introduce **fixtures** – small, reusable pieces of setup code
+In this section we introduce **fixtures** – small, reusable pieces of setup code
 that pytest can inject into your tests by **name**.
 
-### 6.1. A simple calculator fixture (`test_calculator_fixtures.py`)
+### 8.1. A simple calculator fixture (`test_calculator_fixtures.py`)
 
 We created a new file: `test_calculator_fixtures.py`.
 
@@ -2218,7 +2201,7 @@ import pytest
 import calculator
 
 
-# Phase 3 – Fixtures: reusing a calculator instance
+# Fixtures: reusing a calculator instance
 
 
 @pytest.fixture
@@ -2287,7 +2270,7 @@ In later examples we will show:
 - How fixture **scopes** work (function, class, module, package, session).
 - How to move fixtures into `conftest.py` so they can be reused by many files.
 
-### 6.2. Fixture scopes and teardown with `yield` (`test_fixture_scopes.py`)
+### 8.2. Fixture scopes and teardown with `yield` (`test_fixture_scopes.py`)
 
 To demonstrate **fixture scopes** and `yield`-based teardown, we created
 another file: `test_fixture_scopes.py`.
@@ -2296,7 +2279,7 @@ another file: `test_fixture_scopes.py`.
 import pytest
 
 
-# Phase 3 – Fixtures: scopes and teardown with `yield`
+# Fixtures: scopes and teardown with `yield`
 
 call_log = []
 
@@ -2387,7 +2370,7 @@ single file that uses *all five* scopes:
 import pytest
 
 
-# Phase 3 – Fixtures: demonstrating all fixture scopes
+# Fixtures: demonstrating all fixture scopes
 
 call_log = []
 
@@ -2599,7 +2582,7 @@ same counter:
 import session_scope_shared as shared
 
 
-# Phase 3 – Fixtures: session scope across multiple top-level modules
+# Fixtures: session scope across multiple top-level modules
 
 
 def test_session_fixture_seen_in_first_module(session_fix):
@@ -2654,7 +2637,7 @@ import pytest
 import calculator
 
 
-# Phase 3 – Fixtures: fixtures depending on other fixtures
+# Fixtures: fixtures depending on other fixtures
 
 
 @pytest.fixture
@@ -2720,7 +2703,7 @@ We created `test_autouse_fixture.py`:
 import pytest
 
 
-# Phase 3 – Fixtures: autouse fixture runs for every test in this module
+# Fixtures: autouse fixture runs for every test in this module
 
 
 log = []
@@ -2786,7 +2769,7 @@ We created `test_tmp_path_fixture.py`:
 import pytest
 
 
-# Phase 3 – Fixtures: using built-in tmp_path fixture
+# Fixtures: using built-in tmp_path fixture
 
 
 paths = []
@@ -2843,7 +2826,7 @@ We created `test_parametrized_fixture.py`:
 import pytest
 
 
-# Phase 3 – Fixtures: parametrized fixture (preview for Phase 5)
+# Fixtures: parametrized fixture (preview for parametrization)
 
 
 @pytest.fixture(params=[1, 2, 3])
@@ -2900,14 +2883,14 @@ The full pytest output is saved at the bottom of
 
 ---
 
-## 6. What’s Next (Phase 2 Preview)
+## 6. What’s Next
 
 Now that you’re comfortable with basic assertions on numbers, strings, and lists, the next step is to:
 
 - Write tests for **real functions** instead of only literals.
 - Start organizing code into **modules** and **test files**.
 
-In **Phase 2**, we’ll:
+Next, you’ll:
 
 - Create a small `calculator` module (e.g. `add`, `subtract`, `multiply`, `divide`).
 - Write tests in a file like `test_calculator.py`.
@@ -3033,7 +3016,7 @@ We created `test_module_markers.py`:
 import pytest
 
 
-# Phase 4 – Markers: module-level markers with pytestmark
+# Markers: module-level markers with pytestmark
 
 
 pytestmark = pytest.mark.slow
@@ -3087,7 +3070,7 @@ import sys
 import pytest
 
 
-# Phase 4 – Markers: conditional skipping with skipif
+# Markers: conditional skipping with skipif
 
 
 RUN_EXPENSIVE = False
@@ -3146,7 +3129,7 @@ import os
 import pytest
 
 
-# Phase 4 – Markers: runtime skip and xfail inside tests
+# Markers: runtime skip and xfail inside tests
 
 
 def test_runtime_skip_if_env_not_set():
@@ -3205,7 +3188,7 @@ markers =
 
 This removes the `PytestUnknownMarkWarning` for `@pytest.mark.slow`, your
 `@pytest.mark.assertion` marker in `test_group.py`, and the new `api` / `db`
-markers used in Phase 4.
+markers used in the markers examples above.
 
 Now you can safely use:
 
