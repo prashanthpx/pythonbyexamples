@@ -1,5 +1,5 @@
 import pytest
-pytest_plugins = ["session_scope_shared"]
+# pytest_plugins = ["session_scope_shared"]  # Moved to conftest_patterns/
 
 
 

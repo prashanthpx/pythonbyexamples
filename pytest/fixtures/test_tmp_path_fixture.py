@@ -18,6 +18,8 @@ def test_tmp_path_is_unique_per_test(tmp_path):
     paths.append(tmp_path)
     if len(paths) == 2:
         # When the second test runs, both entries should be present and different.
+        assert paths[0] != paths[1]
+
 
 '''
 Output from: pytest -v test_tmp_path_fixture.py
@@ -34,6 +36,4 @@ test_tmp_path_fixture.py::test_tmp_path_is_unique_per_test PASSED
 
 ==================================================== 2 passed in 0.01s ====================================================
 '''
-
-        assert paths[0] != paths[1]
 

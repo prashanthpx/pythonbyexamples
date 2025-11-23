@@ -1,4 +1,4 @@
-import session_scope_shared as shared
+from conftest_patterns import session_scope_shared as shared
 
 
 # Phase 3 – Fixtures: session scope across multiple top-level modules
