@@ -9,3 +9,4 @@ def test_calc_fixtures(calc_values):
 	values = calc_values
 	for val in values:
 		print(f"{val}")
+	assert values["a"] == 10
