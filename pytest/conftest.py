@@ -1,7 +1,22 @@
+import pathlib
+import sys
+
 import pytest
-# pytest_plugins = ["session_scope_shared"]  # Moved to conftest_patterns/
 
+# Ensure the repository root (one level above this "pytest" folder) is on
+# ``sys.path`` so that our small training plugin package can be imported
+# reliably, even when pytest chooses a different working directory.
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
+# Enable a small example plugin that demonstrates how large projects
+# use pytest plugins to enrich test behavior and reporting.
+#
+# The plugin implementation lives in
+# ``pytest/training_pytest_plugins/meta_report_plugin.py`` and is loaded
+# here via its module name.
+pytest_plugins = ["training_pytest_plugins.meta_report_plugin"]
 
 # @pytest.fixture(autouse=True)
 @pytest.fixture

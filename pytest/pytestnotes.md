@@ -3309,11 +3309,22 @@ markers =
     slow: tests that are slow or optional
     api: tests that call external or HTTP APIs
     db: tests that touch the database or persistence layer
+    component(name): logical component or subsystem under test (e.g. "rest", "cli")
+    owner(name): owning team or person responsible for the test (e.g. "storage-team")
+    intent(name): high-level intent for the test (e.g. "clusterload", "smoke")
+    require_feature_flags(*names): one or more feature flags required for this test to run
+    level(name): coarse test level such as "smoke", "integration", or "system"
+
+filterwarnings =
+    # Example: silence generic DeprecationWarnings from libraries to keep output clean
+    ignore:.*is deprecated.*:DeprecationWarning
 ```
 
 This removes the `PytestUnknownMarkWarning` for `@pytest.mark.slow`, your
-`@pytest.mark.assertion` marker in `test_group.py`, and the new `api` / `db`
-markers used in the markers examples above.
+`@pytest.mark.assertion` marker in `test_group.py`, the `api` / `db`
+markers used in the markers examples above, and also prepares richer markers
+(`component`, `owner`, `intent`, `require_feature_flags`, `level`) for the
+more advanced examples later in this guide.
 
 Now you can safely use:
 
@@ -3465,6 +3476,853 @@ The full pytest output is stored at the bottom of `test_selection_k.py`.
 
 ---
 
-- Explain how to run just that module’s tests and how to read failures.
+### 6.10. Global configuration, rich markers, and a tiny plugin
 
-When you’re ready, tell me and we’ll design the `calculator` module and its tests together.
+So far in Section 6 you have:
+
+- Seen how to tag tests with basic markers (`slow`, `api`, `db`, `assertion`).
+- Registered those markers in `pytest.ini`.
+- Selected tests using `-m` and `-k`.
+
+Large suites like the `clusterload` project go further and use **richer markers
+plus plugins** to add metadata to test output.
+
+We added:
+
+- Extra markers in `pytest/pytest.ini`:
+  - `component(name)`
+  - `owner(name)`
+  - `intent(name)`
+  - `require_feature_flags(*names)`
+  - `level(name)`
+- A tiny plugin in `pytest/training_pytest_plugins/meta_report_plugin.py`.
+- A configuration line in `pytest/conftest.py`:
+
+<augment_code_snippet path="pytest/conftest.py" mode="EXCERPT">
+````python
+pytest_plugins = ["training_pytest_plugins.meta_report_plugin"]
+````
+</augment_code_snippet>
+
+- And an example test file:
+  - `pytest/conftest_patterns/test_global_config_effects.py`
+
+#### 6.10.1. The example tests
+
+Here is a shortened version of the first test:
+
+<augment_code_snippet path="pytest/conftest_patterns/test_global_config_effects.py" mode="EXCERPT">
+````python
+@pytest.mark.owner("storage-team")
+@pytest.mark.component("rest")
+@pytest.mark.level("integration")
+def test_rest_component_example() -> None:
+    assert 1 + 1 == 2
+````
+</augment_code_snippet>
+
+The test itself is trivial; the interesting part is the **markers**.
+
+Run just this file:
+
+```bash
+pytest -vs pytest/conftest_patterns/test_global_config_effects.py
+```
+
+Expected output (abbreviated):
+
+```text
+[meta] conftest_patterns/test_global_config_effects.py::test_rest_component_example (owner=storage-team, component=rest)
+.[meta] conftest_patterns/test_global_config_effects.py::test_slow_cluster_intent (owner=infra-team)
+.[meta] conftest_patterns/test_global_config_effects.py::test_requires_feature_flags (owner=ui-team, component=ui)
+.
+3 passed in 0.01s
+```
+
+Key things to notice:
+
+- The **plugin** prints a `[meta] ...` line before each test that uses
+  `owner` and/or `component`.
+- The usual `.` / `PASSED` reporting still works exactly as before.
+- The tests themselves stay simple; all the extra behavior comes from
+  **pytest.ini + markers + plugin**.
+
+This mirrors what you saw in the `clusterload` suite: rich markers and
+plugins give you a powerful way to slice, analyze, and report on tests
+without complicating individual test functions.
+
+---
+
+## 7. REST-style clients and versioned fixtures (cluster-style)
+
+In the real `clusterload` test suite, many tests exercise **REST
+clients** that talk to a storage array. Those tests use:
+
+- fixtures that construct client objects, and
+- parametrized fixtures that run the **same test across multiple API
+  versions**, importing version-specific schema helpers.
+
+To mirror that in a small, friendly way we created a mini package:
+
+- `pytest/rest_versioning/` with:
+  - `rest_client.py` – a tiny fake REST client
+  - `schemas_v1.py`, `schemas_v2.py` – versioned schema information
+  - `test_rest_client_basic_fixture.py` – simple single-version fixture
+  - `test_rest_client_versioned_schemas.py` – parametrized versions and
+    dynamic imports
+
+### 7.1. Simple REST client fixture (one version)
+
+`test_rest_client_basic_fixture.py` introduces the simplest useful
+pattern: a fixture that returns a **ready-to-use client object**.
+
+<augment_code_snippet path="pytest/rest_versioning/rest_client.py" mode="EXCERPT">
+````python
+@dataclass
+class RestClient:
+    base_url: str
+    api_version: str
+
+    def list_volumes(self) -> Dict[str, Any]:
+        return {"api_version": self.api_version, "volumes": []}
+````
+</augment_code_snippet>
+
+The tests define two fixtures:
+
+<augment_code_snippet path="pytest/rest_versioning/test_rest_client_basic_fixture.py" mode="EXCERPT">
+````python
+@pytest.fixture
+def api_version() -> str:
+    return "v1"
+
+
+@pytest.fixture
+def rest_client(api_version: str) -> RestClient:
+    return RestClient(
+        base_url="https://storage.example.test",
+        api_version=api_version,
+    )
+````
+</augment_code_snippet>
+
+And a simple test that uses the fixture:
+
+<augment_code_snippet path="pytest/rest_versioning/test_rest_client_basic_fixture.py" mode="EXCERPT">
+````python
+@pytest.mark.component("rest")
+@pytest.mark.owner("training-team")
+def test_client_exposes_version_and_url(rest_client: RestClient) -> None:
+    assert rest_client.api_version == "v1"
+    assert rest_client.base_url == "https://storage.example.test"
+````
+</augment_code_snippet>
+
+Run just this file with:
+
+```bash
+pytest -vs pytest/rest_versioning/test_rest_client_basic_fixture.py
+```
+
+Expected output (abbreviated):
+
+```text
+[meta] rest_versioning/test_rest_client_basic_fixture.py::test_client_exposes_version_and_url (owner=training-team, component=rest)
+rest_versioning/test_rest_client_basic_fixture.py::test_client_exposes_version_and_url PASSED
+rest_versioning/test_rest_client_basic_fixture.py::test_list_volumes_includes_version PASSED
+
+============================================== 2 passed in 0.01s ===============================================
+```
+
+Key ideas:
+
+- The **fixture graph** is tiny: `rest_client` depends on `api_version`.
+- Tests stay very small – they simply ask for `rest_client` by name.
+- Our earlier **marker plugin** prints a `[meta] ...` line that includes
+  the `owner` and `component` markers.
+
+### 7.2. Parametrized versions and dynamic schema imports
+
+The next step is to let the same tests run against **multiple API
+versions**, each with slightly different schema rules.
+
+The schema modules are intentionally small:
+
+<augment_code_snippet path="pytest/rest_versioning/schemas_v1.py" mode="EXCERPT">
+````python
+REQUIRED_FIELDS: List[str] = ["name", "size_gb"]
+OPTIONAL_FIELDS: List[str] = ["description"]
+````
+</augment_code_snippet>
+
+<augment_code_snippet path="pytest/rest_versioning/schemas_v2.py" mode="EXCERPT">
+````python
+REQUIRED_FIELDS: List[str] = ["name", "size_gb", "compression"]
+OPTIONAL_FIELDS: List[str] = ["description", "replication"]
+````
+</augment_code_snippet>
+
+The test module `test_rest_client_versioned_schemas.py` starts with a
+**parametrized** `api_version` fixture:
+
+<augment_code_snippet path="pytest/rest_versioning/test_rest_client_versioned_schemas.py" mode="EXCERPT">
+````python
+@pytest.fixture(params=["v1", "v2"], ids=["rest-v1", "rest-v2"])
+def api_version(request: pytest.FixtureRequest) -> str:
+    return str(request.param)
+````
+</augment_code_snippet>
+
+That single fixture makes every test in the module run **twice** – once
+for `v1` and once for `v2`. The `ids` control how the cases appear in
+pytest output.
+
+Next, a fixture that **dynamically imports** the right schema module
+based on the version:
+
+<augment_code_snippet path="pytest/rest_versioning/test_rest_client_versioned_schemas.py" mode="EXCERPT">
+````python
+@pytest.fixture
+def schema_module(api_version: str) -> ModuleType:
+    return importlib.import_module(f".schemas_{api_version}", package=__package__)
+````
+</augment_code_snippet>
+
+The main test that exercises the version difference:
+
+<augment_code_snippet path="pytest/rest_versioning/test_rest_client_versioned_schemas.py" mode="EXCERPT">
+````python
+@pytest.mark.component("rest")
+@pytest.mark.level("integration")
+def test_schema_required_fields_change_with_version(
+    api_version: str, schema_module: ModuleType
+) -> None:
+    assert "name" in schema_module.REQUIRED_FIELDS
+    assert "size_gb" in schema_module.REQUIRED_FIELDS
+
+    if api_version == "v1":
+        assert "compression" not in schema_module.REQUIRED_FIELDS
+    else:
+        assert "compression" in schema_module.REQUIRED_FIELDS
+````
+</augment_code_snippet>
+
+And finally a test that shows the client using the same `api_version`:
+
+<augment_code_snippet path="pytest/rest_versioning/test_rest_client_versioned_schemas.py" mode="EXCERPT">
+````python
+@pytest.mark.component("rest")
+@pytest.mark.intent("clusterload")
+@pytest.mark.level("integration")
+def test_list_volumes_includes_api_version(
+    api_version: str, rest_client: RestClient
+) -> None:
+    payload = rest_client.list_volumes()
+    assert payload["api_version"] == api_version
+````
+</augment_code_snippet>
+
+Run just this file:
+
+```bash
+pytest -vs pytest/rest_versioning/test_rest_client_versioned_schemas.py
+```
+
+Expected output (abbreviated):
+
+```text
+[meta] rest_versioning/test_rest_client_versioned_schemas.py::test_schema_required_fields_change_with_version[rest-v1] (component=rest)
+rest_versioning/test_rest_client_versioned_schemas.py::test_schema_required_fields_change_with_version[rest-v1] PASSED
+[meta] rest_versioning/test_rest_client_versioned_schemas.py::test_schema_required_fields_change_with_version[rest-v2] (component=rest)
+rest_versioning/test_rest_client_versioned_schemas.py::test_schema_required_fields_change_with_version[rest-v2] PASSED
+[meta] rest_versioning/test_rest_client_versioned_schemas.py::test_list_volumes_includes_api_version[rest-v1] (component=rest)
+rest_versioning/test_rest_client_versioned_schemas.py::test_list_volumes_includes_api_version[rest-v1] PASSED
+[meta] rest_versioning/test_rest_client_versioned_schemas.py::test_list_volumes_includes_api_version[rest-v2] (component=rest)
+rest_versioning/test_rest_client_versioned_schemas.py::test_list_volumes_includes_api_version[rest-v2] PASSED
+
+============================================== 4 passed in 0.02s ===============================================
+```
+
+Key ideas to take away:
+
+- Parametrized fixtures (`@pytest.fixture(params=[...])`) are a natural
+  way to run the same logical test across many versions.
+- Fixtures can depend on other fixtures (`schema_module` depends on
+  `api_version`), building small **fixture graphs**.
+- Even though we used dynamic imports, the tests remain easy to read:
+  the interesting differences live in the tiny `schemas_v1` and
+  `schemas_v2` modules.
+
+---
+
+## 8. CLI and replication fixtures with compatibility layers
+
+The `clusterload` suite also has rich fixtures for **CLI tools** and
+**replication testbeds**. They create in-memory representations of
+clusters, wire them together with replication links, and then provide
+fixtures that tests can use without worrying about how everything was
+constructed.
+
+This section mirrors those patterns in a tiny, easy-to-read form under
+`pytest/cli_replication/`:
+
+- `cli_app.py` – domain objects (`FakeCluster`, `FakeCli`,
+  `ReplicationTestbed`)
+- `test_cli_basic_fixture.py` – a simple `cli` fixture
+- `test_cli_replication_and_compat.py` – replication testbed +
+  compatibility-layer fixtures
+
+### 8.1. Simple CLI fixture: one cluster per test
+
+`test_cli_basic_fixture.py` is the CLI analogue of our basic REST
+client example.
+
+The domain objects live in `cli_app.py`:
+
+<augment_code_snippet path="pytest/cli_replication/cli_app.py" mode="EXCERPT">
+````python
+@dataclass
+class FakeCluster:
+    name: str
+    volumes: Set[str] = field(default_factory=set)
+
+
+class FakeCli:
+    def __init__(self, cluster: FakeCluster) -> None:
+        self.cluster = cluster
+````
+</augment_code_snippet>
+
+The file then defines a small `cli` fixture:
+
+<augment_code_snippet path="pytest/cli_replication/test_cli_basic_fixture.py" mode="EXCERPT">
+````python
+@pytest.fixture
+def cli() -> FakeCli:
+    cluster = FakeCluster(name="primary")
+    return FakeCli(cluster)
+````
+</augment_code_snippet>
+
+and two tests that use it:
+
+<augment_code_snippet path="pytest/cli_replication/test_cli_basic_fixture.py" mode="EXCERPT">
+````python
+@pytest.mark.component("cli")
+@pytest.mark.owner("training-team")
+def test_create_and_list_volumes(cli: FakeCli) -> None:
+    cli.create_volume("alpha")
+    cli.create_volume("beta")
+    assert cli.list_volumes() == ["alpha", "beta"]
+````
+</augment_code_snippet>
+
+<augment_code_snippet path="pytest/cli_replication/test_cli_basic_fixture.py" mode="EXCERPT">
+````python
+@pytest.mark.component("cli")
+@pytest.mark.intent("clusterload")
+@pytest.mark.level("integration")
+def test_each_test_gets_isolated_cli(cli: FakeCli) -> None:
+    assert cli.list_volumes() == []
+````
+</augment_code_snippet>
+
+Run just this file:
+
+```bash
+pytest -vs pytest/cli_replication/test_cli_basic_fixture.py
+```
+
+Expected output (abbreviated):
+
+```text
+[meta] cli_replication/test_cli_basic_fixture.py::test_create_and_list_volumes (owner=training-team, component=cli)
+cli_replication/test_cli_basic_fixture.py::test_create_and_list_volumes PASSED
+[meta] cli_replication/test_cli_basic_fixture.py::test_each_test_gets_isolated_cli (component=cli)
+cli_replication/test_cli_basic_fixture.py::test_each_test_gets_isolated_cli PASSED
+
+============================================== 2 passed in 0.01s ===============================================
+```
+
+Key ideas:
+
+- The `cli` fixture hides how the `FakeCluster` and `FakeCli` are
+  constructed.
+- Each test call gets a **fresh instance**, so tests do not interfere
+  with each other.
+
+### 8.2. Replication testbed and compatibility fixtures
+
+The more advanced file, `test_cli_replication_and_compat.py`, introduces
+two extra fixture patterns:
+
+1. a **yield-style** fixture that performs setup and teardown around a
+   testbed object, and
+2. a **compatibility fixture** that adapts an existing testbed to
+   support older tests.
+
+The replication testbed itself is defined in `cli_app.py`:
+
+<augment_code_snippet path="pytest/cli_replication/cli_app.py" mode="EXCERPT">
+````python
+@dataclass
+class ReplicationTestbed:
+    primary: FakeCluster
+    secondary: FakeCluster
+    primary_cli: FakeCli
+    secondary_cli: FakeCli
+    link: ReplicationLink
+
+    def replicate(self, volume: str) -> None:
+        if volume not in self.primary.volumes:
+            raise ValueError
+        self.secondary.volumes.add(volume)
+        self.link.replicated.add(volume)
+````
+</augment_code_snippet>
+
+The yield-style fixture wires everything together and prints setup /
+teardown messages:
+
+<augment_code_snippet path="pytest/cli_replication/test_cli_replication_and_compat.py" mode="EXCERPT">
+````python
+@pytest.fixture
+def replication_testbed(clusters: tuple[FakeCluster, FakeCluster]) -> ReplicationTestbed:
+    primary, secondary = clusters
+    testbed = ReplicationTestbed(
+        primary=primary,
+        secondary=secondary,
+        primary_cli=FakeCli(primary),
+        secondary_cli=FakeCli(secondary),
+        link=ReplicationLink(source=primary, target=secondary),
+    )
+
+    print(f"[setup] created replication testbed {primary.name}->{secondary.name}")
+    yield testbed
+    print("[teardown] clearing replication state")
+````
+</augment_code_snippet>
+
+The main replication test uses this fixture:
+
+<augment_code_snippet path="pytest/cli_replication/test_cli_replication_and_compat.py" mode="EXCERPT">
+````python
+@pytest.mark.component("cli")
+@pytest.mark.level("integration")
+def test_replication_flow_uses_yield_fixture(
+    replication_testbed: ReplicationTestbed,
+) -> None:
+    replication_testbed.primary_cli.create_volume("data-vol")
+    replication_testbed.replicate("data-vol")
+
+    assert replication_testbed.primary_cli.list_volumes() == ["data-vol"]
+    assert replication_testbed.secondary_cli.list_volumes() == ["data-vol"]
+    assert replication_testbed.is_replicated("data-vol") is True
+````
+</augment_code_snippet>
+
+Finally, the compatibility fixture presents the same testbed with legacy
+attribute names:
+
+<augment_code_snippet path="pytest/cli_replication/test_cli_replication_and_compat.py" mode="EXCERPT">
+````python
+@dataclass
+class LegacyReplicationView:
+    src_cli: FakeCli
+    dst_cli: FakeCli
+    testbed: ReplicationTestbed
+
+
+@pytest.fixture
+def legacy_replication_testbed(replication_testbed: ReplicationTestbed) -> LegacyReplicationView:
+    print("[compat] adapting ReplicationTestbed to LegacyReplicationView")
+    return LegacyReplicationView(
+        src_cli=replication_testbed.primary_cli,
+        dst_cli=replication_testbed.secondary_cli,
+        testbed=replication_testbed,
+    )
+````
+</augment_code_snippet>
+
+and a test that uses the adapted view:
+
+<augment_code_snippet path="pytest/cli_replication/test_cli_replication_and_compat.py" mode="EXCERPT">
+````python
+@pytest.mark.component("cli")
+@pytest.mark.intent("clusterload")
+@pytest.mark.level("system")
+def test_legacy_view_uses_compat_fixture(
+    legacy_replication_testbed: LegacyReplicationView,
+) -> None:
+    legacy_replication_testbed.src_cli.create_volume("legacy-vol")
+    legacy_replication_testbed.testbed.replicate("legacy-vol")
+
+    assert legacy_replication_testbed.dst_cli.list_volumes() == ["legacy-vol"]
+````
+</augment_code_snippet>
+
+Run the whole module with `-s` so you can see the setup/teardown and
+compatibility messages:
+
+```bash
+pytest -vs pytest/cli_replication/test_cli_replication_and_compat.py
+```
+
+Expected output (abbreviated):
+
+```text
+[meta] cli_replication/test_cli_replication_and_compat.py::test_replication_flow_uses_yield_fixture (component=cli)
+[setup] created replication testbed primary->secondary
+cli_replication/test_cli_replication_and_compat.py::test_replication_flow_uses_yield_fixture PASSED
+[teardown] clearing replication state
+
+[meta] cli_replication/test_cli_replication_and_compat.py::test_legacy_view_uses_compat_fixture (component=cli)
+[setup] created replication testbed primary->secondary
+[compat] adapting ReplicationTestbed to LegacyReplicationView
+cli_replication/test_cli_replication_and_compat.py::test_legacy_view_uses_compat_fixture PASSED
+[teardown] clearing replication state
+
+============================================== 2 passed in 0.02s ===============================================
+```
+
+Key ideas to take away from this example:
+
+- **Yield fixtures** are ideal when you need both setup and teardown for
+  a shared environment (here: the replication testbed).
+- A **compatibility fixture** lets you migrate large test suites
+  gradually by supporting both old and new calling conventions over the
+  same underlying helpers.
+
+---
+
+## 9. Custom collection hooks and label-based selection
+
+So far we have used built-in selection mechanisms (`-m`, `-k`) and
+simple plugins. Large suites sometimes need more control over which
+tests run and how they are grouped.
+
+Pytest exposes this through **collection hooks**:
+
+- `pytest_addoption(parser)` to add new command-line options.
+- `pytest_collection_modifyitems(config, items)` to inspect and adjust
+  the list of collected tests before they run.
+
+To keep this topic isolated and safe, we created a small package under
+`pytest/collection_patterns/` with:
+
+- `conftest.py` 3 custom CLI flags and hooks
+- `test_labeled_examples.py` 3 a few tests that use the existing
+  `component` marker as a simple **label**
+
+### 9.1. Adding `--label` and `--list-labels`
+
+The `conftest.py` in this folder defines two options:
+
+- `--label NAME` (can be repeated) to run only tests whose
+  `@pytest.mark.component("NAME")` marker matches one of the given
+  labels.
+- `--list-labels` to print all component labels seen in this folder and
+  exit without running tests.
+
+<augment_code_snippet path="pytest/collection_patterns/conftest.py" mode="EXCERPT">
+````python
+def pytest_addoption(parser: pytest.Parser) -> None:
+    group = parser.getgroup("collection-patterns")
+    group.addoption(
+        "--label",
+        action="append",
+        dest="_collection_labels",
+        default=[],
+        metavar="NAME",
+        help=(
+            "Only run tests in pytest/collection_patterns whose component "
+            "marker matches one of the given labels."
+        ),
+    )
+    group.addoption(
+        "--list-labels",
+        action="store_true",
+        dest="_collection_list_labels",
+        help=(
+            "List component labels used by tests in pytest/collection_patterns "
+            "and exit without running them."
+        ),
+    )
+````
+</augment_code_snippet>
+
+The helper `_component_label` interprets the `component` marker as a
+label:
+
+<augment_code_snippet path="pytest/collection_patterns/conftest.py" mode="EXCERPT">
+````python
+def _component_label(item: pytest.Item) -> Optional[str]:
+    marker = item.get_closest_marker("component")
+    if marker and marker.args:
+        return str(marker.args[0])
+    return None
+````
+</augment_code_snippet>
+
+### 9.2. Filtering items with `pytest_collection_modifyitems`
+
+The main hook inspects `labels` / `list_only` and either lists labels or
+filters tests in-place:
+
+<augment_code_snippet path="pytest/collection_patterns/conftest.py" mode="EXCERPT">
+````python
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: List[pytest.Item]
+) -> None:
+    labels: List[str] = config.getoption("_collection_labels") or []
+    list_only: bool = bool(config.getoption("_collection_list_labels"))
+
+    if not labels and not list_only:
+        return
+
+    seen_labels = {lbl for lbl in (_component_label(i) for i in items) if lbl}
+    terminal_reporter = config.pluginmanager.get_plugin("terminalreporter")
+
+    if list_only:
+        if terminal_reporter is not None:
+            for lbl in sorted(seen_labels):
+                terminalreporter.write_line(f"[label] {lbl}")
+        items[:] = []
+        return
+
+    selected = _filter_items_by_labels(items, labels)
+    if terminal_reporter is not None:
+        terminal_reporter.write_line(
+            f"[collection] selected {len(selected)}/{len(items)} tests "
+            f"matching labels: {', '.join(labels)}"
+        )
+    items[:] = selected
+````
+</augment_code_snippet>
+
+Notice how we **modify** the `items` list *in-place*; this is how you
+can drop, reorder, or duplicate collected tests before they run.
+
+### 9.3. The labeled tests
+
+The tests themselves are deliberately tiny; they just use the existing
+`component`, `intent`, `level`, and `slow` markers as labels:
+
+<augment_code_snippet path="pytest/collection_patterns/test_labeled_examples.py" mode="EXCERPT">
+````python
+@pytest.mark.component("rest")
+@pytest.mark.intent("docs")
+@pytest.mark.level("smoke")
+def test_rest_smoke() -> None:
+    assert True
+
+
+@pytest.mark.component("cli")
+@pytest.mark.intent("docs")
+@pytest.mark.level("smoke")
+def test_cli_smoke() -> None:
+    assert True
+````
+</augment_code_snippet>
+
+and two more tests labelled `rest` (slow) and `misc`.
+
+Run the file normally to see that all four tests pass:
+
+```bash
+pytest -vs pytest/collection_patterns/test_labeled_examples.py
+```
+
+Expected output (abbreviated):
+
+```text
+[meta] collection_patterns/test_labeled_examples.py::test_rest_smoke (component=rest)
+collection_patterns/test_labeled_examples.py::test_rest_smoke PASSED
+[meta] collection_patterns/test_labeled_examples.py::test_cli_smoke (component=cli)
+collection_patterns/test_labeled_examples.py::test_cli_smoke PASSED
+[meta] collection_patterns/test_labeled_examples.py::test_rest_slow (component=rest)
+collection_patterns/test_labeled_examples.py::test_rest_slow PASSED
+[meta] collection_patterns/test_labeled_examples.py::test_unlabeled_misc (component=misc)
+collection_patterns/test_labeled_examples.py::test_unlabeled_misc PASSED
+
+============================================== 4 passed in 0.01s ===============================================
+```
+
+### 9.4. Selecting tests by label
+
+Now try selecting by label:
+
+```bash
+pytest -vs pytest/collection_patterns/test_labeled_examples.py --label rest --label cli
+```
+
+Expected output (abbreviated):
+
+```text
+[collection] selected 3/4 tests matching labels: rest, cli
+
+[meta] collection_patterns/test_labeled_examples.py::test_rest_smoke (component=rest)
+collection_patterns/test_labeled_examples.py::test_rest_smoke PASSED
+[meta] collection_patterns/test_labeled_examples.py::test_cli_smoke (component=cli)
+collection_patterns/test_labeled_examples.py::test_cli_smoke PASSED
+[meta] collection_patterns/test_labeled_examples.py::test_rest_slow (component=rest)
+collection_patterns/test_labeled_examples.py::test_rest_slow PASSED
+
+============================================== 3 passed in 0.01s ===============================================
+```
+
+The `test_unlabeled_misc` test is dropped because its `component("misc")`
+label does not match `rest` or `cli`.
+
+### 9.5. Listing labels without running tests
+
+Finally, you can just list labels and exit without running any tests:
+
+```bash
+pytest -q pytest/collection_patterns/test_labeled_examples.py --list-labels -s
+```
+
+Expected output:
+
+```text
+[label] cli
+[label] misc
+[label] rest
+
+no tests ran in 0.01s
+```
+
+Key ideas to take away:
+
+- `pytest_addoption` lets you extend the pytest CLI with domain-specific
+  switches.
+- `pytest_collection_modifyitems` gives you full control over which
+  items are run and how they are grouped.
+- You do **not** need custom hooks for everyday work 3 `-m` and `-k`
+  are usually enough. Hooks become useful when your project needs
+  higher-level concepts like "labels", "scenarios", or complex skip
+	  rules that are hard to express with simple marker expressions.
+
+### 9.6. Skip and xfail by label (runtime hooks)
+
+Section 6 already showed how to **skip** or **xfail** tests using markers
+like `@pytest.mark.skipif` and `@pytest.mark.xfail`. In
+`pytest/collection_patterns/conftest.py` we add a different pattern:
+apply skip/xfail **at runtime** based on the `component` label and
+command-line flags.
+
+First, extra options in `pytest_addoption`:
+
+<augment_code_snippet path="pytest/collection_patterns/conftest.py" mode="EXCERPT">
+````python
+group.addoption(
+    "--skip-label",
+    action="append",
+    dest="_collection_skip_labels",
+    default=[],
+    metavar="NAME",
+    help=(
+        "Skip tests in pytest/collection_patterns whose component "
+        "marker matches one of the given labels."
+    ),
+)
+group.addoption(
+    "--xfail-label",
+    action="append",
+    dest="_collection_xfail_labels",
+    default=[],
+    metavar="NAME",
+    help=(
+        "Xfail tests in pytest/collection_patterns whose component "
+        "marker matches one of the given labels."
+    ),
+)
+````
+</augment_code_snippet>
+
+Then a `pytest_runtest_setup` hook that checks the test's label and applies
+skip/xfail:
+
+<augment_code_snippet path="pytest/collection_patterns/conftest.py" mode="EXCERPT">
+````python
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    config = item.config
+    skip_labels = set(config.getoption("_collection_skip_labels") or [])
+    xfail_labels = set(config.getoption("_collection_xfail_labels") or [])
+
+    if not skip_labels and not xfail_labels:
+        return
+
+    label = _component_label(item)
+    if label is None:
+        return
+
+    if label in skip_labels:
+        pytest.skip(f"Skipping component '{label}' via --skip-label")
+
+    if label in xfail_labels:
+        pytest.xfail(f"Xfailing component '{label}' via --xfail-label")
+````
+</augment_code_snippet>
+
+This hook is deliberately **independent** from collection filtering:
+
+- `--label` / `--list-labels` decide **which tests are collected**.
+- `--skip-label` / `--xfail-label` decide how collected tests are treated at
+  **runtime** (run normally, SKIPPED, or XFAILED).
+
+Try skipping all `rest` tests in this file:
+
+```bash
+pytest -vs pytest/collection_patterns/test_labeled_examples.py --skip-label rest
+```
+
+Expected output (abbreviated):
+
+```text
+pytest/collection_patterns/test_labeled_examples.py::test_rest_smoke SKIPPED (Skipping component 'rest' via
+--skip-label)
+pytest/collection_patterns/test_labeled_examples.py::test_cli_smoke PASSED
+pytest/collection_patterns/test_labeled_examples.py::test_rest_slow SKIPPED (Skipping component 'rest' via
+--skip-label)
+pytest/collection_patterns/test_labeled_examples.py::test_unlabeled_misc PASSED
+
+============================================ 2 passed, 2 skipped in 0.01s ============================================
+```
+
+Now mark all `cli` tests as expected-fail:
+
+```bash
+pytest -vs pytest/collection_patterns/test_labeled_examples.py --xfail-label cli
+```
+
+Expected output (abbreviated):
+
+```text
+pytest/collection_patterns/test_labeled_examples.py::test_rest_smoke PASSED
+pytest/collection_patterns/test_labeled_examples.py::test_cli_smoke XFAIL (Xfailing component 'cli' via
+--xfail-label)
+pytest/collection_patterns/test_labeled_examples.py::test_rest_slow PASSED
+pytest/collection_patterns/test_labeled_examples.py::test_unlabeled_misc PASSED
+
+============================================ 3 passed, 1 xfailed in 0.03s ============================================
+```
+
+This is a tiny version of the kinds of **label-aware skip/xfail rules** you
+might see in a large suite like `clusterload`.
+
+---
+
+## Appendix A. Quick links to advanced topics
+
+Use these hyperlinks to jump directly to important sections in this
+notebook:
+
+- [Markers in pytest](#6-markers-in-pytest)
+- [Combining multiple markers and `-m` expressions](#68-combining-multiple-markers-and-m-expressions-test_multi_markers_selectionpy)
+- [Global configuration, rich markers, and a tiny plugin](#610-global-configuration-rich-markers-and-a-tiny-plugin)
+- [REST-style clients and versioned fixtures (cluster-style)](#7-rest-style-clients-and-versioned-fixtures-cluster-style)
+- [CLI and replication fixtures with compatibility layers](#8-cli-and-replication-fixtures-with-compatibility-layers)
+- [Custom collection hooks and label-based selection](#9-custom-collection-hooks-and-label-based-selection)
+- [Skip and xfail by label (runtime hooks)](#96-skip-and-xfail-by-label-runtime-hooks)
+- [Mocking with pytest: monkeypatch and mocker](#11-mocking-with-pytest-monkeypatch-and-mocker)
