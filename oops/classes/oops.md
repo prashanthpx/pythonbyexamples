@@ -94,6 +94,17 @@ You will often see three method types in real code:
 - **Class methods**: constructors or helpers that belong to the *class*.
 - **Static methods**: utility functions grouped for convenience.
 
+> **Cheat sheet – when to use which**
+>
+> - Use an **instance method** when the logic depends on `self` (per-object
+>   state).
+> - Use a **classmethod** when the logic depends on the **class**, shared
+>   configuration, or is an **alternate constructor** (`from_dict`, `from_env`,
+>   etc.). No instance should be required.
+> - Use a **staticmethod** for a small utility/validator that does not need
+>   either `self` or `cls`, but you want it grouped with the class for
+>   organization.
+
 <augment_code_snippet path="practice/oops/classes/oops.md" mode="EXCERPT">
 ````python
 class User:
@@ -116,6 +127,92 @@ Where this shows up in projects:
 
 - `from_dict` / `from_row` / `from_env` constructors are very common.
 - `@staticmethod` methods are often simple validators or formatters.
+
+#### 2.3.1. When to use `@classmethod` instead of an instance method
+
+Example file: `oops/classes/classmethod_examples.py`.
+
+A simplified version of the first part:
+
+<augment_code_snippet path="oops/classes/classmethod_examples.py" mode="EXCERPT">
+````python
+class CounterInstanceStyle:
+    class_count: int = 0
+
+    def print_class_count(self) -> None:
+        print(f"[instance] class_count = {CounterInstanceStyle.class_count}")
+````
+</augment_code_snippet>
+
+<augment_code_snippet path="oops/classes/classmethod_examples.py" mode="EXCERPT">
+````python
+class CounterClassMethod:
+    class_count: int = 0
+
+    @classmethod
+    def print_class_count(cls) -> None:
+        print(f"[classmethod] {cls.__name__}.class_count = {cls.class_count}")
+````
+</augment_code_snippet>
+
+Key takeaways:
+
+- If a method **does not use `self`** and only works with **class-level state**
+  like `class_count` or shared configuration, make it a `@classmethod`.
+- With an instance method you must create an object you **do not actually
+  need**, just to call the method; with `@classmethod` you can call
+  `MyClass.method()` directly.
+- `@classmethod` expresses intent: *"this behavior belongs to the class, not a
+  particular object"*. This is clearer than `obj.method()` when the logic is
+  really about the class.
+- Classmethods work naturally with **inheritance**: in
+  `SubCounter(CounterClassMethod)`, calling `SubCounter.print_class_count()`
+  uses `SubCounter.class_count`, because `cls` is the subclass.
+- In real code, `@classmethod` is heavily used for **alternate constructors**
+  such as `User.from_dict(...)`, `Config.from_env()`, or `Job.from_row(db_row)`.
+- A classmethod **does not require `__init__` at all**: you can have utility
+  classes that are never instantiated but still expose useful
+  `@classmethod` APIs (for example `Config.load(path)` or
+  `Registry.register_default()`). The example file also includes
+  `UserWithAltConstructor.from_first_last(...)` to show this pattern.
+
+#### 2.3.2 Alternate constructors with `@classmethod`
+
+In many projects you will see classmethods used as **alternate constructors**:
+
+- They are often named `from_first_last`, `from_dict`, `from_env`, `default`,
+  etc.
+- They **return a new instance** of the class (usually by calling `cls(...)`).
+- They can be called **without an existing object**: `User.from_dict(data)`.
+
+Typical patterns:
+
+- **Different input shape** – e.g. `User.from_first_last(first, last)` builds
+  the full name inside the class instead of every caller writing
+  `User(first + " " + last)`.
+- **Parsing external data** – e.g. `User.from_dict(payload)` when data comes
+  from JSON/DB rows, not positional arguments.
+- **Loading configuration** – e.g. `Config.from_env()` that reads environment
+  variables and returns a ready-to-use `Config` instance.
+- **Preset defaults** – e.g. `RetryPolicy.default()` that returns a commonly
+  used configuration object.
+
+One small example from `oops/classes/classmethod_examples.py`:
+
+<augment_code_snippet path="oops/classes/classmethod_examples.py" mode="EXCERPT">
+````python
+class UserWithAltConstructor:
+    def __init__(self, full_name: str) -> None:
+        self.full_name = full_name
+
+    @classmethod
+    def from_first_last(cls, first: str, last: str) -> "UserWithAltConstructor":
+        return cls(f"{first} {last}")
+````
+</augment_code_snippet>
+
+The key idea: the **class** owns the object-creation details; callers just pick
+the right constructor name based on where their data comes from.
 
 ### 2.4. Encapsulation and conventions
 
