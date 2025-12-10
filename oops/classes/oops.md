@@ -86,6 +86,35 @@ class Config:
 
 In real projects, class attributes are often used for **constants or defaults**.
 
+> **Shadowing rule (very common interview / bug question)**
+>
+> - If an instance has `self.name`, that value **shadows** `User.name` on the
+>   class when you access `obj.name`.
+> - There is **no conflict**: they live in different places (`obj.__dict__`
+>   vs `User.__dict__`). Python just looks on the instance first, then falls
+>   back to the class.
+>
+> Small demo: `oops/classes/class_vs_instance_name_shadowing.py`.
+
+<augment_code_snippet path="oops/classes/class_vs_instance_name_shadowing.py" mode="EXCERPT">
+````python
+class User:
+    name: str = "class-default"  # class attribute
+
+    def __init__(self, name: str) -> None:
+        self.name = name          # instance attribute
+````
+</augment_code_snippet>
+
+After `u1 = User("Alice")` and `u2 = User("Bob")`:
+
+- `u1.name` → `"Alice"` (instance attribute)
+- `u2.name` → `"Bob"` (instance attribute)
+- `User.name` → `"class-default"` (class attribute)
+
+If you *did not* assign `self.name` in `__init__`, then `u1.name` would fall
+back to the class variable `User.name`.
+
 ### 2.3. Instance, class, and static methods
 
 You will often see three method types in real code:
@@ -213,6 +242,37 @@ class UserWithAltConstructor:
 
 The key idea: the **class** owns the object-creation details; callers just pick
 the right constructor name based on where their data comes from.
+
+Another example file: `oops/classes/retry_policy_examples.py` compares two
+designs:
+
+- `RetryPolicyRigid` – hard-codes defaults in `__init__`, so every instance is
+  identical (no flexibility).
+- `RetryPolicy` – keeps `__init__` general and offers presets via
+  `default()`, `fast()`, `slow()` classmethods.
+
+<augment_code_snippet path="oops/classes/retry_policy_examples.py" mode="EXCERPT">
+````python
+class RetryPolicy:
+    def __init__(self, attempts: int, delay: float) -> None:
+        self.attempts = attempts
+        self.delay = delay
+
+    @classmethod
+    def default(cls) -> "RetryPolicy":
+        return cls(attempts=3, delay=1.0)
+````
+</augment_code_snippet>
+
+Key differences:
+
+- Hard-coding values in `__init__` gives you **only one** configuration.
+- Using classmethods as alternate constructors lets you keep
+  `__init__` **flexible** (`RetryPolicy(7, 2.5)`) and still provide
+  **named presets** (`RetryPolicy.default()`, `RetryPolicy.fast()`, ...).
+- Because classmethods receive `cls`, calling `CustomRetryPolicy.default()`
+  returns a `CustomRetryPolicy` instance, which is hard to achieve if everything
+  is baked into `__init__`.
 
 ### 2.4. Encapsulation and conventions
 
