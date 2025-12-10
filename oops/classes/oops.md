@@ -704,6 +704,42 @@ This is **runtime polymorphism**:
 - Calling `handler.handle(task)` automatically uses the correct overridden
   method for each subclass.
 
+#### Polymorphism vs `@override`
+
+It is easy to confuse **polymorphism** with the `@override` decorator sometimes
+seen in type-checked Python code:
+
+- **Polymorphism** is the *runtime* behaviour you just saw: different
+  subclasses provide their own `handle()` implementation, and Python picks the
+  right one based on the actual object.
+- **`@override`** (from `typing` / `typing_extensions`) is just a *static
+  check* that you really are overriding a method from the base class. It does
+  not change how method calls behave.
+
+For example, with abstract shapes:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+from typing import override
+
+
+class Shape:
+    def area(self) -> float:
+        ...
+
+
+class Square(Shape):
+    @override
+    def area(self) -> float:  # type checkers verify this really overrides
+        return 4 * 4
+````
+</augment_code_snippet>
+
+If you accidentally wrote `def areaaaa(self)` by mistake, `@override` would let
+type checkers warn you that you are *not* actually overriding anything. The
+runtime polymorphism (`shape.area()`) is the same with or without
+`@override`.
+
 ### 5.3. Real output from the inheritance/polymorphism example
 
 From inside `practice/oops/classes`:
@@ -727,6 +763,81 @@ You will see this pattern everywhere in real codebases:
 - Many small subclasses which each implement one concrete behavior.
 - High-level code that depends only on the base class, so you can plug in new
   subclasses without changing that high-level logic.
+
+
+### 5.4. Abstract base classes (`ABC`) and `@abstractmethod`
+
+Sometimes you want a base class that is **only a blueprint**, not something
+you ever instantiate directly. In Python you model this with an **abstract base
+class** (ABC).
+
+Example file: `oops/classes/abc_shape_example.py`.
+
+<augment_code_snippet path="oops/classes/abc_shape_example.py" mode="EXCERPT">
+````python
+from abc import ABC, abstractmethod
+
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self) -> float:
+        ...  # subclasses must implement this
+
+
+class Square(Shape):
+    def __init__(self, side: float) -> None:
+        self.side = side
+
+    def area(self) -> float:
+        return self.side * self.side
+````
+</augment_code_snippet>
+
+Key ideas:
+
+- `ABC` stands for **Abstract Base Class**.
+  - A class inheriting from `ABC` is meant to be a **blueprint**.
+  - You cannot instantiate it if it has unimplemented `@abstractmethod`s.
+- `@abstractmethod` marks methods that **must be implemented** by subclasses.
+- A subclass that implements all abstract methods becomes a **concrete class**
+  and can be instantiated.
+
+The file also contains a `BadShape` example that forgets to implement
+`area()`:
+
+<augment_code_snippet path="oops/classes/abc_shape_example.py" mode="EXCERPT">
+````python
+class BadShape(Shape):
+    # No area() implementation here on purpose.
+    pass
+
+
+bad = BadShape()  # TypeError: Can't instantiate abstract class BadShape
+````
+</augment_code_snippet>
+
+Contrast this with a plain base class **without** `ABC` / `@abstractmethod`:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+class Shape:
+    def area(self) -> float:
+        # Placeholder implementation
+        return 0.0
+
+
+s = Shape()  # This succeeds, even though area() is not meaningful
+````
+</augment_code_snippet>
+
+Using `ABC` + `@abstractmethod` tells Python (and your team):
+
+- "This class is not meant to be instantiated directly."
+- "Subclasses must provide real implementations for these methods."
+
+Paired with polymorphism, this gives you a clear, enforced contract: code can
+depend on the abstract `Shape` interface, while concrete subclasses (`Square`,
+`Circle`, ...) provide the actual behaviour.
 
 
 ---
@@ -838,3 +949,60 @@ Properties are a key tool for **evolving** your classes safely:
 - You can start with a plain public attribute (e.g. `balance`).
 - Later, if you need validation or logging, you can convert it into a property
   without changing existing call sites (`account.balance` still works).
+  This is how real projects add encapsulation without breaking their API.
+
+Another small example file, `oops/classes/property_use_cases.py`, shows other
+common patterns:
+
+- **Computed values** – `Rectangle.area` is a property that calculates
+  `width * height` but is used like `rect.area` (no `get_area()` method).
+- **Hiding implementation details** – `UserFullName.full_name` joins
+  `first` and `last`, but callers just use `user.full_name`.
+- **Lazy loading / caching** – `Data.expensive_result` runs a heavy operation
+  only on first access, then returns the cached value.
+- **Validation on assignment** – `UserEmail.email` validates the address in a
+  property setter while callers keep writing `user.email = "alice@example.com"`.
+
+#### Tiny before/after: evolving a public attribute into a property
+
+Often you really do start with a plain public attribute and later realise you
+need validation or other logic. Properties let you **upgrade** the
+implementation without changing how callers use it.
+
+Example file: `oops/classes/property_evolution_example.py`.
+
+"Before" – simple public attribute:
+
+<augment_code_snippet path="oops/classes/property_evolution_example.py" mode="EXCERPT">
+````python
+class UserV1:
+    def __init__(self, age: int) -> None:
+        self.age = age  # direct public attribute
+````
+</augment_code_snippet>
+
+"After" – same idea, but `age` is now a property with validation. Callers still
+write `user.age` and `user.age = value`:
+
+<augment_code_snippet path="oops/classes/property_evolution_example.py" mode="EXCERPT">
+````python
+class UserV2:
+    def __init__(self, age: int) -> None:
+        self._age = 0
+        self.age = age  # goes through the setter
+
+    @property
+    def age(self) -> int:
+        return self._age
+
+    @age.setter
+    def age(self, value: int) -> None:
+        if value < 0:
+            raise ValueError("Age cannot be negative")
+        self._age = value
+````
+</augment_code_snippet>
+
+In a real project you would just evolve the original `User` implementation, but
+the idea is the same: callers keep using `user.age` while you add
+encapsulation, validation, logging, caching, etc. behind the scenes.
