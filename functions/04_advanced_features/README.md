@@ -1229,9 +1229,10 @@ def create_list(item: T, count: int) -> list[T]:
 | [`lambda_functions.py`](lambda_functions.py) | Lambda functions and patterns | 543 |
 | [`closures.py`](closures.py) | Closures and encapsulation | 624 |
 | [`type_hints.py`](type_hints.py) | Advanced type hints | 769 |
+| [`param_spec_examples.py`](param_spec_examples.py) | Callable + ParamSpec helper examples (`call_twice`, `wait_until`) | ~120 |
 | [`list_optional_basics.py`](list_optional_basics.py) | List and Optional type hints (beginner guide) | 464 |
 
-**Total**: 4 files, 2,400 lines of code and documentation
+**Total**: 5 files, 2,500+ lines of code and documentation
 
 ---
 

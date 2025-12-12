@@ -716,7 +716,7 @@ seen in type-checked Python code:
   check* that you really are overriding a method from the base class. It does
   not change how method calls behave.
 
-For example, with abstract shapes:
+For example, with shapes:
 
 <augment_code_snippet mode="EXCERPT">
 ````python
@@ -739,6 +739,24 @@ If you accidentally wrote `def areaaaa(self)` by mistake, `@override` would let
 type checkers warn you that you are *not* actually overriding anything. The
 runtime polymorphism (`shape.area()`) is the same with or without
 `@override`.
+
+Example file: `oops/classes/override_typo_example.py` shows a common bug:
+
+- You intend to override `language()` from a base class.
+- In the subclass you accidentally write `languag()` with a typo and decorate
+  it with `@override`.
+- At **runtime**, Python happily runs and still calls the base `language()`
+  method; `@override` is ignored.
+- A **static type checker** (mypy, pyright, PyCharm, VS Code) would instead
+  flag an error like "Method `languag` does not override any method in
+  superclass".
+
+So in practice:
+
+- Use polymorphism for behaviour (`obj.method()` dispatching to different
+  implementations).
+- Use `@override` to let tools catch mistakes in your overrides; it only has an
+  effect when you run a type checker.
 
 ### 5.3. Real output from the inheritance/polymorphism example
 
