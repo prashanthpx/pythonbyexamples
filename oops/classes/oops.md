@@ -857,6 +857,489 @@ Paired with polymorphism, this gives you a clear, enforced contract: code can
 depend on the abstract `Shape` interface, while concrete subclasses (`Square`,
 `Circle`, ...) provide the actual behaviour.
 
+### 5.5 Abstract, generic services: `class Service(ABC, Generic[HandleT])`
+
+In real projects you will often see classes defined like:
+
+```python
+class Service(ABC, Generic[HandleT]):
+    ...
+```
+
+This means the class:
+
+- Inherits from **`ABC`** → it is an **abstract base class** (a blueprint).
+- Inherits from **`Generic[HandleT]`** → it is **generic over a type
+  parameter** `HandleT`.
+
+Put differently:
+
+- `ABC` says: *"You cannot instantiate this until all abstract methods are
+  implemented by a subclass."*
+- `Generic[HandleT]` says: *"This class works with some handle type `HandleT`
+  chosen by the subclass (or caller).
+
+#### 5.5.1 Quick recap: `ABC`
+
+From above:
+
+- `ABC` and `@abstractmethod` let you define a **blueprint**.
+- Subclasses **must implement** all abstract methods.
+- Trying to instantiate the abstract class directly raises `TypeError`.
+
+Tiny standalone example:
+
+```python
+from abc import ABC, abstractmethod
+
+
+class Animal(ABC):
+    @abstractmethod
+    def speak(self) -> None:
+        ...
+
+
+# a = Animal()  # TypeError: Can't instantiate abstract class Animal
+```
+
+#### 5.5.2 Quick recap: generic classes with `TypeVar` and `Generic`
+
+Python's `typing` module lets you write **generic classes** (like generics in
+Java, C#, TypeScript):
+
+- `TypeVar("HandleT")` declares a **type variable**.
+- `Generic[HandleT]` says *"this class is parameterised by a type called
+  `HandleT`"*.
+
+```python
+from typing import Generic, TypeVar
+
+
+HandleT = TypeVar("HandleT")
+
+
+class Service(ABC, Generic[HandleT]):
+    ...
+```
+
+Now `Service[...]` becomes a **family of types**:
+
+- `Service[FileHandle]` – a service whose handle type is `FileHandle`.
+- `Service[DBConnection]` – a service whose handle type is `DBConnection`.
+
+Type checkers then know that if `start()` returns `HandleT`, `stop()` must take
+the **same** type `HandleT`.
+
+#### 5.5.3 Real-world mini framework example
+
+File: `oops/classes/service_generic_example.py`.
+
+We define a generic abstract base class that manages some *resource handle* and
+two concrete services that choose different handle types:
+
+<augment_code_snippet path="oops/classes/service_generic_example.py" mode="EXCERPT">
+````python
+HandleT = TypeVar("HandleT")
+
+
+class Service(ABC, Generic[HandleT]):
+    @abstractmethod
+    def start(self) -> HandleT: ...
+
+    @abstractmethod
+    def stop(self, handle: HandleT) -> None: ...
+
+
+class FileService(Service[str]):
+    ...  # start() returns str, stop() takes str
+
+
+class DatabaseService(Service[DBConnection]):
+    ...  # start() returns DBConnection, stop() takes DBConnection
+````
+</augment_code_snippet>
+
+Key ideas:
+
+- `Service` is an **abstract** base: you cannot instantiate `Service()`.
+- `Service[HandleT]` is also **generic**: subclasses decide what `HandleT`
+  actually is.
+- For `FileService(Service[str])`:
+  - `HandleT` is `str`.
+  - `start()` returns `str` (e.g. a file path or ID).
+  - `stop()` must accept a `str`.
+- For `DatabaseService(Service[DBConnection])`:
+  - `HandleT` is `DBConnection`.
+  - `start()` returns a `DBConnection`.
+  - `stop()` must accept a `DBConnection`.
+
+Because of the generic parameter, **different subclasses can choose different
+handle types**, while sharing the same abstract API (`start` / `stop` /
+`restart`). Type checkers will then warn if you accidentally pass the wrong
+kind of handle to `stop()`.
+
+Mental model:
+
+- `ABC` → *"This is an abstract blueprint; subclasses must fill in the
+  details."*
+- `Generic[HandleT]` → *"This blueprint works for any `HandleT`, and subclasses
+  get to decide what `HandleT` is."*
+
+#### 5.5.4 Why use `Generic[HandleT]` if it is optional?
+
+Important point: **you do not need** `Generic[HandleT]` for the class to work at
+runtime.
+
+This version is perfectly valid Python:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+from abc import ABC, abstractmethod
+
+
+class Service(ABC):
+    @abstractmethod
+    def start(self):
+        ...
+
+    @abstractmethod
+    def stop(self, handle):
+        ...
+````
+</augment_code_snippet>
+
+Python will happily run this. So why bother with generics and type hints?
+
+##### Runtime behaviour vs *meaning*
+
+- `Generic[HandleT]` **does not change runtime behaviour**.
+- It changes what the class **means** to humans and to **type checkers / IDEs**.
+
+Without generics:
+
+- What is `handle`? A `str`? A file object? A DB connection? A Kubernetes pod?
+- Nothing enforces consistency between what `start()` returns and what
+  `stop()` expects.
+- You could accidentally write:
+
+  <augment_code_snippet mode="EXCERPT">
+  ````python
+  s.stop(12345)  # maybe completely wrong type, but Python won't complain
+  ````
+  </augment_code_snippet>
+
+With generics, you encode that relationship in the type system:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+from typing import Generic, TypeVar
+
+
+HandleT = TypeVar("HandleT")
+
+
+class Service(ABC, Generic[HandleT]):
+    @abstractmethod
+    def start(self) -> HandleT:
+        ...
+
+    @abstractmethod
+    def stop(self, handle: HandleT) -> None:
+        ...
+````
+</augment_code_snippet>
+
+Now the class reads as:
+
+> "Whatever type my subclass uses for `HandleT`, `start()` must return it and
+>  `stop()` must accept the same type."
+
+When you create concrete subclasses, type checkers can enforce that:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+class FileService(Service[str]):
+    def start(self) -> str:
+        return "/tmp/app.log"
+
+    def stop(self, handle: str) -> None:
+        ...
+
+
+class DBConnection: ...
+
+
+class DatabaseService(Service[DBConnection]):
+    def start(self) -> DBConnection:
+        return DBConnection()
+
+    def stop(self, handle: DBConnection) -> None:
+        ...
+````
+</augment_code_snippet>
+
+If you accidentally make them inconsistent (for example, `start()` returns
+`int` but `stop()` takes `str`), a type checker like `mypy` or an IDE will warn
+you.
+
+##### Why this is useful in real code
+
+Using `Generic[HandleT]` buys you:
+
+- **Type safety** – helpers like `Service` can be reused across many handle
+  types, while keeping them consistent.
+- **Better readability** – the API is self-documenting: readers see that
+  `start()` and `stop()` are tied via the same `HandleT`.
+- **Stronger IDE support** – autocompletion and inline type hints show the
+  right handle type for each concrete subclass.
+- **Reusable design** – you write `Service` once and specialise it as
+  `Service[str]`, `Service[DBConnection]`, `Service[FileHandle]`, etc.
+
+You can think of it like a labelled toolbox:
+
+- Without generics: a box just labelled *"tool"* – you might throw in a
+  hammer, a banana, and a USB stick; no one stops you.
+- With generics: `Toolbox[Screwdriver]` – now the label says what should go
+  inside, and your tools (type checker, IDE) can complain if you try to put the
+  wrong thing in.
+
+#### 5.5.5 Naming `TypeVar`s and `Any` vs `TypeVar`
+
+Example file: `oops/classes/typevar_vs_any_example.py`.
+
+##### Naming the `TypeVar`
+
+`HandleT = TypeVar("HandleT")` is **just a convention**. You can call it
+anything:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+PHandle = TypeVar("PHandle")
+ID = TypeVar("ID")
+T = TypeVar("T")
+MyType = TypeVar("MyType")
+````
+</augment_code_snippet>
+
+All of these behave the same. People often choose names like:
+
+- `T` / `U` / `V` – short, generic type parameters.
+- `HandleT`, `ItemT` – where the name explains the role (*"handle type"*,
+  *"item type"*), and the `T` suffix hints *"this is a type variable"*.
+
+You could even write:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+Banana = TypeVar("Banana")
+````
+</augment_code_snippet>
+
+It would **work**, but it would be confusing to humans reading the code. Names
+are for readability.
+
+##### `Any` vs `TypeVar`: "I don't care" vs "I care, but not here"
+
+Using `Any` and using `TypeVar` look similar in code, but they mean very
+different things.
+
+**`Any` turns off type checking**:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+class AnyService(ABC):
+    @abstractmethod
+    def start(self) -> Any:
+        ...
+
+    @abstractmethod
+    def stop(self, handle: Any) -> None:
+        ...
+````
+</augment_code_snippet>
+
+Here:
+
+- Type checkers will not warn if `start()` returns the "wrong" type.
+- They will not warn if you pass the "wrong" thing into `stop()`.
+- Calls like `file_service.stop(12345)` or `file_service.stop(None)` are all
+  considered fine.
+
+`Any` effectively means: *"I don't care what the type is."* It trades away
+type safety.
+
+**`TypeVar` keeps track of one unknown, consistent type**:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+HandleT = TypeVar("HandleT")
+
+
+class Service(ABC, Generic[HandleT]):
+    @abstractmethod
+    def start(self) -> HandleT:
+        ...
+
+    @abstractmethod
+    def stop(self, handle: HandleT) -> None:
+        ...
+````
+</augment_code_snippet>
+
+Now subclasses **lock in** a specific type for `HandleT`:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+class FileService(Service[str]):
+    def start(self) -> str:
+        return "/tmp/app.log"
+
+    def stop(self, handle: str) -> None:
+        ...
+
+
+class DBConnection: ...
+
+
+class DatabaseService(Service[DBConnection]):
+    def start(self) -> DBConnection:
+        return DBConnection()
+
+    def stop(self, handle: DBConnection) -> None:
+        ...
+````
+</augment_code_snippet>
+
+For `FileService`, `HandleT` is `str`. For `DatabaseService`, `HandleT` is
+`DBConnection`. A type checker will then report an error if you try something
+like `file_service.stop(123)`.
+
+Another common pattern is a generic container:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+ItemT = TypeVar("ItemT")
+
+
+class Box(Generic[ItemT]):
+    def __init__(self) -> None:
+        self._item: ItemT | None = None
+
+    def put(self, item: ItemT) -> None:
+        self._item = item
+
+    def get(self) -> ItemT | None:
+        return self._item
+````
+</augment_code_snippet>
+
+If you create `b = Box[int]()` then, conceptually:
+
+- `b.put(10)` is OK.
+- `b.put("hi")` is a **type error** (even though Python will run it, your
+  type checker / IDE can warn you).
+
+If you instead defined `Box` using `Any` (like `AnyBox` in the example file),
+you could put `int`, `str`, lists, or anything else into the same box and the
+type checker would never complain. That is the "everything is allowed, no
+enforcement" situation described above.
+
+The key idea:
+
+- `Any` → *"I don't care what the type is."*
+- `TypeVar` → *"I care that the same type is used consistently, but the
+  concrete type will be chosen later (by the subclass or caller)."*
+
+In your `Service` example:
+
+- `start()` returns `HandleT`.
+- `stop()` accepts `HandleT`.
+- `restart()` returns `HandleT`.
+
+All three methods are tied together by the **same** type variable. That
+relationship disappears if you change everything to `Any`. The purpose of the
+`TypeVar` here is **not** to "allow any type"; it is to tie several methods
+together so they all behave consistently once a concrete type is chosen.
+
+#### 5.5.6 Two type parameters: `Dictionary[K, V]`
+
+Sometimes a class needs **more than one** type parameter. A common pattern is a
+mapping type:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+from typing import Generic, TypeVar
+
+
+K = TypeVar("K")
+V = TypeVar("V")
+
+
+class Dictionary(Generic[K, V]):
+    def __init__(self) -> None:
+        self.data: dict[K, V] = {}
+
+    def add(self, key: K, value: V) -> None:
+        self.data[key] = value
+
+    def get(self, key: K) -> V:
+        return self.data[key]
+````
+</augment_code_snippet>
+
+Example file: `oops/classes/dictionary_generic_example.py`.
+
+What this **does not** mean:
+
+- It does **not** mean "values must be of type `K` **and** type `V`".
+- It does **not** mean "keys must match both types".
+- It does **not** mean "keys and values are globally restricted to only these
+  two types".
+
+What it really means:
+
+- The class has **two separate type parameters**.
+- `K` is the type of the **keys**.
+- `V` is the type of the **values**.
+- When you *use* the class, you decide what `K` and `V` are.
+
+You can think of it as a template:
+
+- `Dictionary[KeyType, ValueType]`
+
+When you instantiate it, you plug in real types:
+
+- `Dictionary[str, int]`  keys are `str`, values are `int`.
+- `Dictionary[int, str]`  keys are `int`, values are `str`.
+- `Dictionary[str, list[int]]`  keys are `str`, values are `list[int]`.
+
+For example:
+
+<augment_code_snippet path="oops/classes/dictionary_generic_example.py" mode="EXCERPT">
+````python
+d1 = Dictionary[str, int]()
+d1.add("age", 25)        # OK
+d1.add("height", 180)    # OK
+# d1.add("age", "hello")  # type checker error: value must be int
+
+d2 = Dictionary[int, str]()
+d2.add(1, "apple")       # OK
+# d2.add("one", "apple")  # type checker error: key must be int
+
+d3 = Dictionary[str, list[int]]()
+d3.add("scores", [10, 20, 30])      # OK
+# d3.add("scores", "not a list")     # type checker error: value must be list[int]
+````
+</augment_code_snippet>
+
+So `K` and `V` are **templates**, not concrete types by themselves:
+
+- They do not limit values globally.
+- They simply say "for this particular `Dictionary[K, V]`, keys use `K` and
+  values use `V`".
+- A type checker enforces that consistency for each concrete choice of
+  `Dictionary[...]`.
+
 
 ---
 
