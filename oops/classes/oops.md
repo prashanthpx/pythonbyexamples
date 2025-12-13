@@ -1340,6 +1340,204 @@ So `K` and `V` are **templates**, not concrete types by themselves:
 - A type checker enforces that consistency for each concrete choice of
   `Dictionary[...]`.
 
+#### 5.5.7 Constrained `TypeVar`s: limiting allowed types
+
+So far, our `TypeVar`s have been **unconstrained**:
+
+- `HandleT = TypeVar("HandleT")`
+
+This means:
+
+- `HandleT` can be **any** type.
+- The only rule is *consistency*: every place that uses `HandleT` must use the
+  same concrete type (once chosen).
+
+Sometimes you want to say:
+
+> "This class or function only works with **these specific** types, not any
+>  possible type."
+
+For that, Python lets you define a **constrained** `TypeVar`:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+T = TypeVar("T", A, B)
+````
+</augment_code_snippet>
+
+Meaning:
+
+- `T` is allowed to be **only** `A` or `B`.
+- In set notation: `T ∈ {A, B}`.
+- Nothing else (no `str`, no `float`, etc.).
+
+Applied to your example, you might write (assuming the proper imports):
+
+<augment_code_snippet mode="EXCERPT">
+````python
+from subprocess import Popen
+from typing import Any
+import psutil
+
+
+HandleT = TypeVar("HandleT", Popen[Any], psutil.Process)
+````
+</augment_code_snippet>
+
+This means:
+
+- `HandleT` can be **only one of these** two types:
+  - `Popen[Any]`
+  - `psutil.Process`
+- It is **not** "any type".
+- It is **not** "a base class".
+- It is **not** "both types at once".
+
+You might then use it in a generic service:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+HandleT = TypeVar("HandleT", Popen[Any], psutil.Process)
+
+
+class ProcessService(Generic[HandleT]):
+    def start(self) -> HandleT:
+        ...
+
+    def stop(self, handle: HandleT) -> None:
+        ...
+````
+</augment_code_snippet>
+
+Now subclasses must pick **one of the allowed types**:
+
+- ✅ Works:
+
+  <augment_code_snippet mode="EXCERPT">
+  ````python
+  class PopenService(ProcessService[Popen[Any]]):
+      ...
+
+
+  class PsutilService(ProcessService[psutil.Process]):
+      ...
+  ````
+  </augment_code_snippet>
+
+- ❌ Not allowed (type checker error):
+
+  <augment_code_snippet mode="EXCERPT">
+  ````python
+  class StringService(ProcessService[str]):
+      ...  # str is not in {Popen[Any], psutil.Process}
+  ````
+  </augment_code_snippet>
+
+A type checker will complain that `str` is **not** one of the permitted
+options.
+
+##### About using quoted types: `"Popen[Any]"`
+
+Sometimes you might see something like:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+HandleT = TypeVar("HandleT", "Popen[Any]", psutil.Process)
+````
+</augment_code_snippet>
+
+Here `"Popen[Any]"` is a **string**, not the actual type object. In type
+annotations, strings are used as **forward references**:
+
+- They refer to a type by name (e.g. "User") before it is defined or imported.
+- This is mostly used *inside annotations* to avoid circular imports.
+
+For `TypeVar` constraints, you normally pass the **actual types**, not strings.
+So the preferred version is:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+HandleT = TypeVar("HandleT", Popen[Any], psutil.Process)
+````
+</augment_code_snippet>
+
+##### A small runnable example (without external dependencies)
+
+In this repo we use a similar idea, but with simple stand-in types instead of
+real `Popen` / `psutil.Process` so that the example runs everywhere:
+
+Example file: `oops/classes/process_service_constrained_typevar_example.py`.
+
+<augment_code_snippet path="oops/classes/process_service_constrained_typevar_example.py" mode="EXCERPT">
+````python
+HandleT = TypeVar("HandleT", PopenHandle, PsutilProcessLike)
+
+
+class ProcessService(ABC, Generic[HandleT]):
+    @abstractmethod
+    def start(self) -> HandleT:
+        ...
+
+    @abstractmethod
+    def stop(self, handle: HandleT) -> None:
+        ...
+````
+</augment_code_snippet>
+
+Concrete services choose one of the allowed handle types:
+
+<augment_code_snippet path="oops/classes/process_service_constrained_typevar_example.py" mode="EXCERPT">
+````python
+class PopenService(ProcessService[PopenHandle]):
+    def start(self) -> PopenHandle:
+        handle = PopenHandle("sleep 1")
+        print("Starting:", handle)
+        return handle
+
+    def stop(self, handle: PopenHandle) -> None:
+        print("Stopping:", handle)
+        handle.terminate()
+
+
+class PsutilService(ProcessService[PsutilProcessLike]):
+    def start(self) -> PsutilProcessLike:
+        handle = PsutilProcessLike(1234)
+        print("Starting:", handle)
+        return handle
+
+    def stop(self, handle: PsutilProcessLike) -> None:
+        print("Stopping:", handle)
+        handle.kill()
+````
+</augment_code_snippet>
+
+Trying to define:
+
+<augment_code_snippet path="oops/classes/process_service_constrained_typevar_example.py" mode="EXCERPT">
+````python
+# class StringService(ProcessService[str]):
+#     ...  # type checker error: str not allowed here
+````
+</augment_code_snippet>
+
+would be rejected by a type checker, because `str` is not in the allowed set
+`{PopenHandle, PsutilProcessLike}`.
+
+**TL;DR for constrained `TypeVar`s**
+
+- `HandleT = TypeVar("HandleT", Popen[Any], psutil.Process)` means:
+  - `HandleT` is restricted to **one of exactly two types**:
+    - `Popen[Any]` or `psutil.Process`.
+- It does **not** mean:
+  - "any type is allowed";
+  - "subclasses of those types" (unless your checker also treats them
+    specially);
+  - "both types at once";
+  - "a union of the two".
+- At subclassing / instantiation time you pick **one** of the allowed types,
+  and all uses of `HandleT` in that generic class must be consistent with that
+  choice.
+
 
 ---
 

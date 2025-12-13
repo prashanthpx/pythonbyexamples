@@ -654,6 +654,172 @@ def callback_example(
 - `Callable[[int, str], bool]` - Function taking int and str, returning bool
 - `Callable[[], None]` - Function with no args, returning None
 
+If you come from Go, the mapping is:
+
+- Go: `f func(int) int`
+- Python: `f: Callable[[int], int]`
+
+and in general:
+
+- `Callable[[A, B], R]`  Gos `func(A, B) R`
+
+#### 4.5.1 Callable + ParamSpec for flexible helpers
+
+Sometimes you want helpers that accept *any* function and forward whatever
+arguments it expects. For this we use `ParamSpec`.
+
+**File**: [`param_spec_examples.py`](param_spec_examples.py)  `call_twice`
+
+```python
+from typing import Callable, ParamSpec, TypeVar
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+def call_twice(
+    f: Callable[P, R],
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> tuple[R, R]:
+    return f(*args, **kwargs), f(*args, **kwargs)
+```
+
+Key ideas:
+
+- `Callable[P, R]`  a function that takes some parameters `P` and returns `R`.
+- `P = ParamSpec("P")`  a *type-level* parameter list that can be reused.
+- `*args: P.args, **kwargs: P.kwargs`  this helper accepts **whatever
+  positional and keyword arguments** `f` needs and forwards them with
+  `f(*args, **kwargs)`.
+- `R = TypeVar("R")`  captures the return type so the result is a `tuple[R, R]`.
+
+Usage:
+
+```python
+from param_spec_examples import call_twice, greet
+
+print(call_twice(greet, "Prashanth", punctuation="!"))  # two greetings
+```
+
+#### 4.5.2 Timeout-based wait_until and argument binding
+
+**File**: [`param_spec_examples.py`](param_spec_examples.py)  `wait_until`
+
+```python
+from typing import Callable, ParamSpec
+
+P2 = ParamSpec("P2")
+
+def wait_until(
+    condition: Callable[P2, bool],
+    timeout_sec: float,
+    *args: P2.args,
+    **kwargs: P2.kwargs,
+) -> None:
+    ...
+```
+
+Call:
+
+```python
+from param_spec_examples import wait_until, is_even_after_increment
+
+wait_until(is_even_after_increment, 5, 3, increments=1)
+```
+
+Argument binding step-by-step for this call:
+
+- `condition = is_even_after_increment`
+- `timeout_sec = 5`
+- `args = (3,)`
+- `kwargs = {"increments": 1}`
+
+Inside the helper we only call `condition(*args, **kwargs)`, which becomes:
+
+- `is_even_after_increment(3, increments=1)`
+
+Even though the outer call has three values after the function (`5, 3, increments=1`),
+only two of them (`3` and `increments=1`) are forwarded into the condition; `5`
+is consumed by the wrappers own `timeout_sec` parameter.
+
+This is why helpers like `wait_until` are written very carefully to call:
+
+```python
+condition(*args, **kwargs)
+```
+
+and **not** something like:
+
+```python
+condition(timeout_sec, *args, **kwargs)
+```
+
+which would force the condition to accept a spurious extra parameter.
+
+Your mental model `math(double, 10)` (pass a function plus its arguments into a
+generic helper) is exactly what is happening here.
+
+#### 4.5.3 Wrapper using Any vs using ParamSpec P
+
+A common pattern in real code is to use a strongly-typed core helper and a
+thinner, more flexible wrapper.
+
+**File**: [`param_spec_examples.py`](param_spec_examples.py)  `Service`
+
+```python
+from typing import Any, Callable, ParamSpec
+
+P3 = ParamSpec("P3")
+
+class Service:
+    def wait_until_running(
+        self,
+        *args: Any,
+        timeout_sec: float | None = None,
+        **kwargs: Any,
+    ) -> None:
+        return self._wait_until(
+            self.is_running,
+            "start",
+            timeout_sec,
+            *args,
+            **kwargs,
+        )
+
+    def _wait_until(
+        self,
+        condition: Callable[P3, bool],
+        action: str,
+        timeout_sec: float | None = None,
+        *args: P3.args,
+        **kwargs: P3.kwargs,
+    ) -> None:
+        ...
+```
+
+- `_wait_until` uses `Callable[P3, bool]` and `*args: P3.args, **kwargs: P3.kwargs`
+  to keep the **relationship** between `condition` and its arguments precise.
+- `wait_until_running` is just a **public wrapper** that forwards whatever
+  arguments the caller gives; using `Any` here keeps the method signature
+  simpler and avoids some edge-cases with generic methods on classes.
+- You *could* make `wait_until_running` generic over the same `P3`, but many
+  codebases choose the pragmatic approach: **strict typing in the core helper,
+  simpler `Any` in the thin wrapper**.
+
+#### 4.5.4 What ParamSpec P really represents
+
+- `P = ParamSpec("P")` is a **type-level description of the parameter list**
+  of the target function (e.g. `condition`, `f`).
+- `Callable[P, bool]` says a function taking parameters `P` and returning
+  `bool`.
+- `*args: P.args, **kwargs: P.kwargs` says this helper also accepts those
+  same parameters and forwards them to that function.
+
+At runtime, `P` does **nothing**  it exists purely for static type checkers
+(`mypy`, `pyright`, IDEs). The caller of `call_twice` or `wait_until` never
+“sees” or passes `P`; it is only there so tools can verify that the arguments
+you pass match what the target function expects.
+
 ### 4.6. Generic Types (TypeVar)
 
 **File**: [`type_hints.py`](type_hints.py) - Line 215
@@ -1224,15 +1390,15 @@ def create_list(item: T, count: int) -> list[T]:
 
 ### 📁 Files in This Section
 
-| File | Description | Lines |
-|------|-------------|-------|
-| [`lambda_functions.py`](lambda_functions.py) | Lambda functions and patterns | 543 |
-| [`closures.py`](closures.py) | Closures and encapsulation | 624 |
-| [`type_hints.py`](type_hints.py) | Advanced type hints | 769 |
-| [`param_spec_examples.py`](param_spec_examples.py) | Callable + ParamSpec helper examples (`call_twice`, `wait_until`) | ~120 |
-| [`list_optional_basics.py`](list_optional_basics.py) | List and Optional type hints (beginner guide) | 464 |
+| File | Description |
+|------|-------------|
+| [`lambda_functions.py`](lambda_functions.py) | Lambda functions and patterns |
+| [`closures.py`](closures.py) | Closures and encapsulation |
+| [`type_hints.py`](type_hints.py) | Advanced type hints |
+| [`param_spec_examples.py`](param_spec_examples.py) | Callable + ParamSpec helper examples (`call_twice`, `wait_until`) |
+| [`list_optional_basics.py`](list_optional_basics.py) | List and Optional type hints (beginner guide) |
 
-**Total**: 5 files, 2,500+ lines of code and documentation
+**Total**: 5 files
 
 ---
 

@@ -241,6 +241,101 @@ Default values are created **once** when the function is defined, not each time 
 
 ---
 
+### 4.3. "non-default argument follows default argument" SyntaxError
+
+**File**: [`parameter_order.py`](parameter_order.py) – functions
+`log_number_required_first` and `log_number_keyword_only`
+
+Another rule Python enforces for defaults is:
+
+> **You cannot put a required parameter after one with a default value (in the same parameter group).**
+
+If you try this:
+
+```python
+from typing import Optional
+
+
+def log_number(sl: Optional[int] = 10, nu: int) -> None:
+    print(f"{sl} {nu}")
+```
+
+Python raises a **SyntaxError** at *definition time*:
+
+```text
+SyntaxError: non-default argument follows default argument
+```
+
+Why? Because `sl` has a **default value** (optional), while `nu` is **required**.
+If this were allowed, a simple call like:
+
+```python
+log_number(100)
+```
+
+would be **ambiguous**:
+
+- Should `100` be used for `sl` (and `nu` is missing)?
+- Or should `100` be used for `nu` (and `sl` uses its default `10`)?
+
+Python avoids this confusion by enforcing the rule: **all required parameters must come before optional ones within the same group.**
+
+#### Option 1 – Put the required parameter first
+
+The usual fix is simply to put `nu` (required) before `sl` (optional):
+
+```python
+from typing import Optional
+
+
+def log_number(nu: int, sl: Optional[int] = 10) -> None:
+    print(f"{sl} {nu}")
+
+
+log_number(100)       # nu = 100, sl = 10 (default)
+log_number(5, 20)     # nu = 5,   sl = 20
+```
+
+Now there is no ambiguity:
+
+- The **first positional argument** always goes to `nu`.
+- `sl` is clearly optional and can use its default if omitted.
+
+#### Option 2 – Keep `sl` first using a keyword-only parameter
+
+Sometimes, for readability, you might want to keep `sl` first but still have
+`nu` as a required parameter. You can do this by making `nu` **keyword-only**:
+
+```python
+from typing import Optional
+
+
+def log_number(sl: Optional[int] = 10, *, nu: int) -> None:
+    print(f"{sl} {nu}")
+
+
+log_number(nu=20)        # sl = 10 (default), nu = 20
+log_number(5, nu=20)     # sl = 5,           nu = 20
+```
+
+Here:
+
+- `sl` is a standard parameter with a default (optional, can be positional or keyword).
+- `*` introduces the **keyword-only** section.
+- `nu` is a **required keyword-only** parameter: it **must** be passed as `nu=...`.
+
+Because `sl` and `nu` are now in **different parameter groups** (standard vs
+keyword-only), Python can unambiguously bind calls and the definition is valid.
+
+This example ties together three ideas:
+
+- *Default values* (optional vs required)
+- The `SyntaxError: non-default argument follows default argument`
+- Using `*` to introduce **keyword-only** parameters to control how callers pass
+  arguments
+
+---
+
 ## 5. *args and **kwargs
 
 **File**: [`args_kwargs.py`](args_kwargs.py)
@@ -565,15 +660,15 @@ Ready to learn more? Continue to:
 
 ### 📁 Files in This Section
 
-| File | Description | Lines |
-|------|-------------|-------|
-| [`positional_args.py`](positional_args.py) | Positional arguments and positional-only | 221 |
-| [`keyword_args.py`](keyword_args.py) | Keyword arguments and keyword-only | 270 |
-| [`default_values.py`](default_values.py) | Default values and mutable default pitfall | 308 |
-| [`args_kwargs.py`](args_kwargs.py) | *args, **kwargs, and unpacking | 307 |
-| [`parameter_order.py`](parameter_order.py) | Complete parameter order rules | 318 |
+| File | Description |
+|------|-------------|
+| [`positional_args.py`](positional_args.py) | Positional arguments and positional-only |
+| [`keyword_args.py`](keyword_args.py) | Keyword arguments and keyword-only |
+| [`default_values.py`](default_values.py) | Default values and mutable default pitfall |
+| [`args_kwargs.py`](args_kwargs.py) | *args, **kwargs, and unpacking |
+| [`parameter_order.py`](parameter_order.py) | Complete parameter order rules |
 
-**Total**: 5 files, 1,424 lines of code and documentation
+**Total**: 5 files
 
 ---
 
