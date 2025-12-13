@@ -1,5 +1,5 @@
-"""
-Example: Parameter Order Rules
+"""Example: Parameter Order Rules
+
 Demonstrates the correct order of different parameter types in Python.
 
 Key Concepts:
@@ -12,7 +12,7 @@ Key Concepts:
 - What happens when you break the rules
 """
 
-from typing import Any
+from typing import Any, Optional
 
 
 def correct_order(
@@ -155,6 +155,34 @@ def args_and_kw_only(a: str, *args: int, b: str, c: str = "default") -> dict[str
         Parameters after *args MUST be keyword-only.
     """
     return {"a": a, "args": args, "b": b, "c": c}
+
+
+def log_number_required_first(nu: int, sl: Optional[int] = 10) -> None:
+    """Required parameter before optional with default.
+
+    This follows the rule "required parameters come before optional" within
+    the same parameter group, so it is valid and unambiguous.
+
+    Examples:
+        log_number_required_first(100)      # nu=100, sl=10 (default)
+        log_number_required_first(5, 20)    # nu=5,   sl=20
+    """
+
+    print(f"sl={sl}, nu={nu}")
+
+
+def log_number_keyword_only(sl: Optional[int] = 10, *, nu: int) -> None:
+    """Keep ``sl`` first by making ``nu`` keyword-only.
+
+    Here ``sl`` is a standard parameter with a default value, and ``nu`` is a
+    required keyword-only parameter. Callers must pass ``nu`` by name.
+
+    Examples:
+        log_number_keyword_only(nu=20)      # sl=10 (default), nu=20
+        log_number_keyword_only(5, nu=20)   # sl=5,           nu=20
+    """
+
+    print(f"sl={sl}, nu={nu}")
 
 
 # ============================================================================
@@ -300,6 +328,17 @@ if __name__ == "__main__":
 
     print("\n   Pattern 5: Everything")
     print("   def func(pos, /, std, *args, kw, **kwargs):")
+
+    # ========================================================================
+    # 10. DEFAULT VS REQUIRED ORDER (log_number example)
+    # ========================================================================
+    print("\n10. DEFAULT VS REQUIRED ORDER (log_number example):")
+
+    print("   log_number_required_first(100):")
+    log_number_required_first(100)
+
+    print("   log_number_keyword_only(5, nu=20):")
+    log_number_keyword_only(5, nu=20)
 
     print("\n" + "=" * 60)
 

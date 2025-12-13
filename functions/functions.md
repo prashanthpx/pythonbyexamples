@@ -14,6 +14,22 @@ This comprehensive guide covers everything you need to know about Python functio
 - **Best practices** and common pitfalls
 - **Real-world examples**
 
+You will sometimes see code blocks wrapped like this in the docs:
+
+<augment_code_snippet mode="EXCERPT" path="functions/02_parameters/args_kwargs.py">
+````python
+def sum_numbers(*args: int) -> int:
+    ...
+````
+</augment_code_snippet>
+
+This `<augment_code_snippet>` wrapper is just a tooling helper:
+
+- `path="..."` tells the viewer which real `.py` file the snippet comes from.
+- `mode="EXCERPT"` means only a short slice is shown inline; you can click to
+  open the full file.
+- The inner fenced block is ordinary Python code you can run in that file.
+
 ---
 
 ## 🗺️ Learning Path
@@ -33,7 +49,7 @@ Learn the fundamentals of Python functions:
 - Docstrings and documentation
 - Function structure and naming conventions
 
-**Files**: 5 Python examples, 1,106 lines of code
+**Files**: 5 Python examples
 
 ---
 
@@ -51,80 +67,13 @@ Master different parameter types:
 - Keyword-only parameters
 - Parameter order rules
 
-**Quick beginner summary: `*args` and `**kwargs`**
+See `functions/02_parameters/README.md` for a detailed treatment of:
 
-When you see `*args` and `**kwargs` in a function definition:
+- `*args` and `**kwargs` (variable positional and keyword arguments),
+- real-world uses of flexible argument handling,
+- the bare `*` keyword-only marker and full parameter order rules.
 
-- `*args` means: "accept **any number of extra positional arguments**" → inside
-  the function, `args` is a **tuple**.
-- `**kwargs` means: "accept **any number of extra keyword arguments**" → inside
-  the function, `kwargs` is a **dict**.
-
-Simple `*args` example (sum any number of numbers):
-
-<augment_code_snippet path="functions/02_parameters/args_kwargs.py" mode="EXCERPT">
-````python
-def sum_numbers(*args: int) -> int:
-    total = 0
-    for num in args:
-        total += num
-    return total
-
-sum_numbers(1, 2, 3, 4)  # 10
-````
-</augment_code_snippet>
-
-Simple `**kwargs` example (collect options into a dict):
-
-<augment_code_snippet path="functions/02_parameters/args_kwargs.py" mode="EXCERPT">
-````python
-from typing import Any
-
-
-def print_info(**kwargs: Any) -> None:
-    for key, value in kwargs.items():
-        print(f"{key} = {value}")
-
-print_info(name="Alice", age=25)
-````
-</augment_code_snippet>
-
-Common real-world uses:
-
-- Writing **flexible functions** like `print()` that take any number of
-  arguments.
-- **Forwarding arguments** in wrappers/decorators:
-  `inner(*args, **kwargs)` calls the wrapped function with whatever it
-  received.
-- Building APIs that accept many optional settings via `**kwargs` while still
-  having a small fixed set of required parameters.
-- Allowing base class `__init__` methods to stay generic while subclasses add
-  extra parameters using `*args` / `**kwargs`.
-
-**What does `*` mean in a function parameter list? (keyword-only marker)**
-
-When you write a bare `*` in the parameter list:
-
-- **All parameters after `*` must be passed as keyword arguments only.**
-- This is called the **keyword-only argument marker**.
-
-Tiny example:
-
-<augment_code_snippet mode="EXCERPT">
-````python
-def test(a, *, x, y=10):
-    print(a, x, y)
-
-
-test(1, x=5, y=20)  # OK
-test(1, 5, 20)      # ❌ ERROR — x and y must be keyword arguments
-````
-</augment_code_snippet>
-
-The `*` prevents calls like `test(1, 5, 20)` from accidentally treating `x`
-and `y` as positional arguments. Callers must spell them out as keywords.
-
-**Files**: 5 Python examples, 1,424 lines of code
+**Files**: 5 Python examples
 
 ---
 
@@ -140,7 +89,7 @@ Understand variable scope:
 - LEGB rule
 - Global and nonlocal keywords
 
-**Files**: 5 Python examples, 1,722 lines of code
+**Files**: 5 Python examples
 
 ---
 
@@ -156,6 +105,7 @@ Explore advanced function features:
 - Partial functions
 - List and Optional basics (beginner guide)
 
+<!--
 **Quick beginner summary: `Callable` (function type hints)**
 
 Python already lets you **pass functions to other functions**. `Callable` is
@@ -444,6 +394,20 @@ Putting it together:
 - It’s the Python type-hint equivalent of Go’s **function types**.
 
 **Files**: 4 Python examples, 2,400 lines of code
+-->
+
+In this overview, we only list the topics. For a **deep dive** into:
+
+- mapping Go-style function types to Python’s `Callable` type hints,
+- advanced helpers like `wait_until_true` and `call_twice` using `ParamSpec`,
+- the “wrapper using `Any` vs using `ParamSpec P`” pattern, and
+- how `*args` / `**kwargs` are bound and forwarded in these helpers,
+
+see `functions/04_advanced_features/README.md` (especially the
+**Callable Type Hints** and **Callable + ParamSpec helpers** sections) and the
+examples in `param_spec_examples.py`.
+
+**Files**: 4 Python examples
 
 ---
 
@@ -460,7 +424,7 @@ Learn functional programming concepts:
 - List comprehensions vs functions
 - Pure functions and side effects
 
-**Files**: 3 Python examples, 1,929 lines of code
+**Files**: 3 Python examples
 
 ---
 
@@ -476,7 +440,7 @@ Master function decorators:
 - Built-in decorators (@property, @staticmethod, @classmethod)
 - Decorator chaining
 
-**Files**: 3 Python examples, 1,592 lines of code
+**Files**: 3 Python examples
 - functools.wraps
 
 ---
@@ -493,7 +457,7 @@ Understand generators:
 - Infinite generators
 - Generator pipelines
 
-**Files**: 3 Python examples, 1,398 lines of code
+**Files**: 3 Python examples
 
 ---
 
@@ -509,7 +473,7 @@ Dive into advanced concepts:
 - Partial application (functools.partial)
 - Memoization and caching (@lru_cache, @cache)
 
-**Files**: 3 Python examples, 1,437 lines of code
+**Files**: 3 Python examples
 
 ---
 

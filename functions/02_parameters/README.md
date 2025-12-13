@@ -175,9 +175,9 @@ keyword_only_params("Charlie", 35, "charlie@example.com")  # TypeError!
 
 ---
 
-## 4. Default Values
+## 4. Default Values and Mutable Arguments
 
-**File**: [`default_values.py`](default_values.py)
+**Files**: [`default_values.py`](default_values.py), [`mutable_argument_aliasing.py`](mutable_argument_aliasing.py)
 
 ### 4.1. Basic Default Values
 
@@ -202,7 +202,8 @@ greet("Bob", "Hi")  # "Hi, Bob!"
 
 ### 4.2. The Mutable Default Argument Pitfall
 
-**File**: [`default_values.py`](default_values.py) - Line 88
+**Files**: [`default_values.py`](default_values.py) - mutable list examples,
+[`fn_list_mutable_default_demo.py`](fn_list_mutable_default_demo.py) - `fn_list` comparison
 
 **⚠️ DANGER: Never use mutable objects as defaults!**
 
@@ -238,6 +239,373 @@ list2 = append_to_list_correct("banana")  # ['banana'] - CORRECT!
 ### 💡 Why This Happens
 
 Default values are created **once** when the function is defined, not each time it's called. Mutable objects get modified and retain their state across calls.
+
+#### Example: `fn_list(lt: list)` vs `fn_list(lt: list = [])`
+
+This is one of the **most important Python concepts** to understand.
+
+**Question:**
+
+> Should we write `def fn_list(lt: list) -> list:` or
+> `def fn_list(lt: list = []) -> list:`? What is the difference?
+
+Treat these as **two different definitions** (you would not define both at the
+same time in real code):
+
+**Version 1  no default value (safe)**
+
+```python
+def fn_list(lt: list) -> list:
+    lt.append(100)
+    return lt
+
+
+fn_list([1, 2, 3])  # caller MUST pass a list
+```
+
+- The caller **must** pass a list.
+- No default list is created.
+- No hidden shared state.
+
+If you try:
+
+```python
+fn_list()  # ❌ Error
+```
+
+you get:
+
+```text
+TypeError: fn_list() missing 1 required positional argument: 'lt'
+```
+
+**Version 2  mutable default list (dangerous)**
+
+```python
+def fn_list(lt: list = []) -> list:
+    lt.append(100)
+    return lt
+
+
+print(fn_list())  # [100]
+print(fn_list())  # [100, 100]
+print(fn_list())  # [100, 100, 100]
+```
+
+Here `lt` uses the **same list object** on every call where you omit the
+argument. Python evaluates `lt = []` **once at function definition time**, so
+each call reuses that list.
+
+You can imagine:
+
+```text
+fn_list()
+  lt ───► SAME LIST
+fn_list()
+  lt ───► SAME LIST
+fn_list()
+  lt ───► SAME LIST
+```
+
+This is why professional Python programmers **avoid** mutable defaults.
+
+**Safe alternative  use `None` and create the list inside**
+
+```python
+def fn_list(lt: list | None = None) -> list:
+    if lt is None:
+        lt = []   # new list created EACH CALL
+    lt.append(100)
+    return lt
+
+
+print(fn_list())  # [100]
+print(fn_list())  # [100]
+print(fn_list())  # [100]
+```
+
+Now each call that omits `lt` gets a **fresh**, independent list.
+
+**Summary:**
+
+- `def fn_list(lt: list)`  caller must provide a list → **safe**.
+- `def fn_list(lt: list = [])`  shared mutable default list → **dangerous**.
+- `def fn_list(lt: list | None = None)`  recommended pattern → **safe and flexible**.
+
+---
+
+### 4.3. "non-default argument follows default argument" SyntaxError
+
+**File**: [`parameter_order.py`](parameter_order.py) – functions
+`log_number_required_first` and `log_number_keyword_only`
+
+Another rule Python enforces for defaults is:
+
+> **You cannot put a required parameter after one with a default value (in the same parameter group).**
+
+If you try this:
+
+```python
+from typing import Optional
+
+
+def log_number(sl: Optional[int] = 10, nu: int) -> None:
+    print(f"{sl} {nu}")
+```
+
+Python raises a **SyntaxError** at *definition time*:
+
+```text
+SyntaxError: non-default argument follows default argument
+```
+
+Why? Because `sl` has a **default value** (optional), while `nu` is **required**.
+If this were allowed, a simple call like:
+
+```python
+log_number(100)
+```
+
+would be **ambiguous**:
+
+- Should `100` be used for `sl` (and `nu` is missing)?
+- Or should `100` be used for `nu` (and `sl` uses its default `10`)?
+
+Python avoids this confusion by enforcing the rule: **all required parameters must come before optional ones within the same group.**
+
+#### Option 1 – Put the required parameter first
+
+The usual fix is simply to put `nu` (required) before `sl` (optional):
+
+```python
+from typing import Optional
+
+
+def log_number(nu: int, sl: Optional[int] = 10) -> None:
+    print(f"{sl} {nu}")
+
+
+log_number(100)       # nu = 100, sl = 10 (default)
+log_number(5, 20)     # nu = 5,   sl = 20
+```
+
+Now there is no ambiguity:
+
+- The **first positional argument** always goes to `nu`.
+- `sl` is clearly optional and can use its default if omitted.
+
+#### Option 2 – Keep `sl` first using a keyword-only parameter
+
+Sometimes, for readability, you might want to keep `sl` first but still have
+`nu` as a required parameter. You can do this by making `nu` **keyword-only**:
+
+```python
+from typing import Optional
+
+
+def log_number(sl: Optional[int] = 10, *, nu: int) -> None:
+    print(f"{sl} {nu}")
+
+
+log_number(nu=20)        # sl = 10 (default), nu = 20
+log_number(5, nu=20)     # sl = 5,           nu = 20
+```
+
+Here:
+
+- `sl` is a standard parameter with a default (optional, can be positional or keyword).
+- `*` introduces the **keyword-only** section.
+- `nu` is a **required keyword-only** parameter: it **must** be passed as `nu=...`.
+
+Because `sl` and `nu` are now in **different parameter groups** (standard vs
+keyword-only), Python can unambiguously bind calls and the definition is valid.
+
+This example ties together three ideas:
+
+- *Default values* (optional vs required)
+- The `SyntaxError: non-default argument follows default argument`
+- Using `*` to introduce **keyword-only** parameters to control how callers pass
+  arguments
+
+---
+
+### 4.4. Mutable List Arguments and Aliasing (Why the Caller’s List Changes)
+
+**File**: [`mutable_argument_aliasing.py`](mutable_argument_aliasing.py)
+
+> For a direct comparison of `def fn_list(lt: list)` vs
+> `def fn_list(lt: list = [])` and the `None`-default pattern, see section
+> **4.2 – The Mutable Default Argument Pitfall** (fn_list comparison).
+
+Consider this function and call:
+
+```python
+def fn_list(lt: list = []) -> list:
+    lt[0] = 100
+    lt[1] = 200
+    lt[2] = 300
+
+    for i in lt:
+        print(f" i {i}")
+
+    return lt
+
+
+l = [1, 2, 3]
+m = fn_list(l)
+for i in l:
+    print(f" i {i}")
+```
+
+Output:
+
+```text
+ i 100
+ i 200
+ i 300
+ i 100
+ i 200
+ i 300
+```
+
+#### Why does modifying `lt` also modify `l`?
+
+In Python, **variables hold references to objects**, not the objects themselves.
+
+When you call:
+
+```python
+l = [1, 2, 3]
+m = fn_list(l)
+```
+
+inside `fn_list`, the parameter `lt` becomes a **reference to the exact same
+list object** as `l`. There is **no copy** made automatically:
+
+```text
+l  ───►  [1, 2, 3]  ◄───  lt
+```
+
+So when you do:
+
+```python
+lt[0] = 100
+lt[1] = 200
+lt[2] = 300
+```
+
+you are modifying the **same underlying list** that `l` refers to. That’s why
+the caller sees `l == [100, 200, 300]` after the function call.
+
+You can verify they are the same object using `id`:
+
+```python
+print(id(l))
+print(id(lt))
+```
+
+This prints the same memory address → same object.
+
+**Tiny demo – running `mutable_argument_aliasing.py`:**
+
+```text
+id(l) before: 4335860864
+Inside fn_list (lt):
+ i 100
+ i 200
+ i 300
+id(m) after:  4335860864
+
+Outside fn_list (l):
+ i 100
+ i 200
+ i 300
+
+Same object? True
+```
+
+Think of:
+
+```python
+lt = l
+```
+
+not as “make a copy”, but as **“give me another name for the same object.”**
+
+#### How to prevent modifying the original list
+
+If you want `fn_list` to **work on its own copy** and not change the caller’s
+list, you must create a new list explicitly.
+
+**Option 1 – Copy inside the function**
+
+```python
+def fn_list(lt: list) -> list:
+    lt = lt.copy()  # or list(lt)
+
+    lt[0] = 100
+    lt[1] = 200
+    lt[2] = 300
+
+    return lt
+```
+
+Now:
+
+```python
+l = [1, 2, 3]
+m = fn_list(l)
+
+print(l)  # [1, 2, 3]
+print(m)  # [100, 200, 300]
+```
+
+**Option 2 – Caller passes a copy explicitly**
+
+```python
+m = fn_list(l.copy())
+
+# or using slices
+m = fn_list(l[:])
+```
+
+In both cases, the function receives a **separate list object**, so changes
+inside the function do not affect `l`.
+
+#### Bonus: mutable default in `fn_list(lt: list = [])`
+
+The original function also had a **mutable default**:
+
+```python
+def fn_list(lt: list = []) -> list:
+    ...
+```
+
+This is dangerous for the same reason as in section **4.2**: Python creates the
+default list **once** when the function is defined, so it would be **shared
+across calls** if you ever rely on the default.
+
+The safer pattern is:
+
+```python
+from typing import Optional
+
+
+def fn_list(lt: Optional[list] = None) -> list:
+    if lt is None:
+        lt = []
+    # modify lt here
+    return lt
+```
+
+This way:
+
+- Passing a list gives the function permission to modify that list.
+- Omitting the argument creates a **fresh list** for each call.
+
+**Key idea**: *Python uses references + mutable lists + call-by-object-reference*,
+so passing a list into a function does **not** make a copy. If you want
+independence, you must copy the list yourself.
 
 ---
 
@@ -565,15 +933,15 @@ Ready to learn more? Continue to:
 
 ### 📁 Files in This Section
 
-| File | Description | Lines |
-|------|-------------|-------|
-| [`positional_args.py`](positional_args.py) | Positional arguments and positional-only | 221 |
-| [`keyword_args.py`](keyword_args.py) | Keyword arguments and keyword-only | 270 |
-| [`default_values.py`](default_values.py) | Default values and mutable default pitfall | 308 |
-| [`args_kwargs.py`](args_kwargs.py) | *args, **kwargs, and unpacking | 307 |
-| [`parameter_order.py`](parameter_order.py) | Complete parameter order rules | 318 |
+| File | Description |
+|------|-------------|
+| [`positional_args.py`](positional_args.py) | Positional arguments and positional-only |
+| [`keyword_args.py`](keyword_args.py) | Keyword arguments and keyword-only |
+| [`default_values.py`](default_values.py) | Default values and mutable default pitfall |
+| [`args_kwargs.py`](args_kwargs.py) | *args, **kwargs, and unpacking |
+| [`parameter_order.py`](parameter_order.py) | Complete parameter order rules |
 
-**Total**: 5 files, 1,424 lines of code and documentation
+**Total**: 5 files
 
 ---
 
