@@ -284,6 +284,344 @@ Python doesn’t enforce access modifiers, but teams use naming conventions:
 
 In your own projects, use `_name` to signal “this is an implementation detail”.
 
+#### 2.4.1 Inner helper vs `_make_api` vs static/class helpers
+
+Example file: `oops/classes/method_helper_placement_example.py`.
+
+Sometimes you have a small “helper” operation (like **joining `base_url` and an
+endpoint**) and you are not sure **where to put that logic**:
+
+- define an **inner helper function inside a method**,
+- make a **private instance method** like `_make_api_url`,
+- use a **`@staticmethod`** helper, or
+- expose a **`@classmethod`** alternate constructor.
+
+##### A method that defines an inner helper function
+
+In this example, the `fetch_users_with_inner_helper` method defines a local
+helper function `make_url` inside itself:
+
+<augment_code_snippet path="oops/classes/method_helper_placement_example.py" mode="EXCERPT">
+````python
+class ApiClient:
+    def fetch_users_with_inner_helper(self) -> None:
+        def make_url(endpoint: str) -> str:
+            return f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+        url = make_url("/users")
+````
+</augment_code_snippet>
+
+**Topology**: *“a method defines another function inside it”*.
+
+Good for:
+
+- Very small, **one-off helpers** that are used only in this method.
+- Keeping the outer method readable by pushing a few lines into the inner
+  helper.
+
+Limitations:
+
+- Cannot be reused from other methods or subclasses.
+- Harder to test directly (you can only hit it by calling the outer method).
+
+##### Private instance method: `_make_api_url`
+
+Here we move the helper to a **private instance method** so it can be reused:
+
+<augment_code_snippet path="oops/classes/method_helper_placement_example.py" mode="EXCERPT">
+````python
+class ApiClient:
+    def _make_api_url(self, endpoint: str) -> str:
+        return f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+
+    def fetch_users_with_private_method(self) -> None:
+        url = self._make_api_url("/users")
+````
+</augment_code_snippet>
+
+Key points:
+
+- `_make_api_url` is **part of the class**, but the leading `_` says
+  “internal detail” (callers should not rely on it).
+- Multiple methods can reuse the same helper (see
+  `fetch_orders_with_private_method`).
+- Subclasses can **override** `_make_api_url` to customize behavior.
+
+This is usually the best default **inside one class hierarchy**: clear, testable
+(`client._make_api_url("/users")` in tests), and override-friendly.
+
+##### `@staticmethod` helper: no `self`, no `cls`
+
+If the helper does **not need `self` or `cls` at all**, you can make it a
+`@staticmethod`:
+
+<augment_code_snippet path="oops/classes/method_helper_placement_example.py" mode="EXCERPT">
+````python
+class ApiClient:
+    @staticmethod
+    def _join_url(base_url: str, endpoint: str) -> str:
+        return f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+
+    def fetch_users_with_static_helper(self) -> None:
+        url = self._join_url(self.base_url, "/users")
+````
+</augment_code_snippet>
+
+Key ideas:
+
+- `_join_url` is a **pure function**; grouping it on the class is for
+  **organization**, not because it needs object state.
+- In tests you can call `ApiClient._join_url("https://api", "/users")`
+  directly.
+- If you later realize it *does* need `self` or `cls`, you can convert it to an
+  instance method or classmethod.
+
+You could also make `_join_url` a **module-level** function; whether you use a
+`@staticmethod` is mostly a **style / organization** decision.
+
+##### `@classmethod` option: alternate constructors / shared config
+
+Classmethods are most useful when you want an **alternate constructor** or need
+to work with **class-level configuration**, not for tiny helpers:
+
+<augment_code_snippet path="oops/classes/method_helper_placement_example.py" mode="EXCERPT">
+````python
+class ApiClient:
+    @classmethod
+    def from_default(cls) -> "ApiClient":
+        default_base = "https://api.example.com"
+        return cls(default_base)
+````
+</augment_code_snippet>
+
+Here:
+
+- `from_default` hides *how* we decide the default base URL (config, env vars,
+  etc.).
+- Callers just do `ApiClient.from_default()` to get a ready-to-use client.
+- Subclasses get the right type automatically:
+  `SpecialClient.from_default()` returns a `SpecialClient` instance because
+  `cls` is the subclass.
+
+##### Summary – choosing between them
+
+- **Inner helper** (function inside a method): keep very local details readable;
+  use when the helper is truly one-off and tied to that method only.
+- **Private instance method** (e.g. `_make_api_url`): best when multiple methods
+  in the same class (or subclasses) share behavior that depends on `self`.
+- **`@staticmethod`**: use for pure helpers that do not touch `self`/`cls` but
+  conceptually “belong” with the class.
+- **`@classmethod`**: use when the logic is about the **class itself** (common
+  examples: `from_dict`, `from_env`, `from_default`, or building typed
+  instances from configuration).
+
+##### When *not* to use inner functions
+
+Even though inner helpers are convenient, they are a bad fit when:
+
+- You **know** the helper will be reused by other methods or subclasses.
+- You want to **override** the behavior in a subclass (you cannot override an
+  inner function, but you *can* override `_make_api_url`).
+- You want to **unit-test** the helper in isolation (private methods and
+  staticmethods are much easier to call directly in tests).
+
+In those cases, prefer a private instance method like `_make_api_url` or a
+`@staticmethod`/module-level helper. Reserve inner helpers for truly local
+details that you do not intend to share or override.
+
+##### Quick comparison table: where to put helper logic
+
+| Helper location              | Needs `self`/`cls`? | Reusable across methods? | Overridable in subclasses? | Easy to unit-test directly? | Typical use case                                      |
+|-----------------------------|----------------------|---------------------------|-----------------------------|-----------------------------|-------------------------------------------------------|
+| **Inner helper function**   | Yes (via closure)    | No                        | No                          | No                          | One-off local logic inside a single method           |
+| **Private instance method** | Yes (`self`)         | Yes                       | Yes                         | Yes (`obj._helper(...)`)    | Shared behavior that depends on instance state       |
+| **`@staticmethod`**         | No                   | Yes                       | No (but can be shadowed)    | Yes (`Class.helper(...)`)   | Pure utility that conceptually belongs to the class  |
+| **`@classmethod`**          | Yes (`cls`)          | Yes                       | Yes                         | Yes (`Class.helper(...)`)   | Alternate constructors, class-level configuration    |
+| **Module-level function**   | No                   | Yes                       | N/A                         | Yes (`helper(...)`)         | Generic utility not tied to any particular class     |
+
+### 2.5. How object creation and `self` really work (`__new__`, `__init__`, and argument binding)
+
+Example file: `oops/classes/object_creation_self_binding_example.py`.
+
+#### 2.5.1 The simple rule when you call a class
+
+When you write:
+
+```python
+GatekeeperService(some_argument)
+```
+
+Python secretly does **two steps**:
+
+```python
+temp_obj = GatekeeperService.__new__(GatekeeperService)
+GatekeeperService.__init__(temp_obj, some_argument)
+```
+
+So for `__init__`:
+
+- The **first argument** is always the **new object being created** → this is
+  what we call `self`.
+- Any arguments you write in parentheses go to the **remaining parameters**.
+
+Key idea:
+
+- There is **no magical swapping** of arguments.
+- There is **no automatic passing of some “caller object”**.
+- Only what you explicitly pass is passed.
+
+#### 2.5.2 Example: `ClusterInstance` passing itself into `Service`
+
+Example file: `oops/classes/object_creation_self_binding_example.py`.
+
+In the example, `ClusterInstance` has a class attribute `PORT` and, inside its
+constructor, it creates a `Service` and passes itself in:
+
+<augment_code_snippet path="oops/classes/object_creation_self_binding_example.py" mode="EXCERPT">
+````python
+class Service:
+    def __init__(self, val: "ClusterInstance") -> None:
+        print(val.PORT)
+
+
+class ClusterInstance:
+    PORT = 100
+
+    def __init__(self) -> None:
+        self.g = Service(self)
+````
+</augment_code_snippet>
+
+And then we construct a `ClusterInstance`:
+
+```python
+c = ClusterInstance()
+```
+
+The program prints:
+
+```text
+100
+```
+
+Let’s break down **exactly** what happens, step by step.
+
+##### Step 1 – Creating the `ClusterInstance`
+
+This call:
+
+```python
+c = ClusterInstance()
+```
+
+is conceptually expanded by Python into:
+
+```python
+temp_cluster_obj = ClusterInstance.__new__(ClusterInstance)
+ClusterInstance.__init__(temp_cluster_obj)
+```
+
+So inside `ClusterInstance.__init__`, the name `self` refers to:
+
+- `self` → the **new `ClusterInstance` object** (`temp_cluster_obj`).
+
+##### Step 2 – Calling `Service(self)` from inside `ClusterInstance.__init__`
+
+Inside `ClusterInstance.__init__` we run:
+
+```python
+self.g = Service(self)
+```
+
+At that moment, `self` is still the `ClusterInstance` object, so you can think
+of the call as:
+
+```python
+Service(self_cluster_obj)
+```
+
+##### Step 3 – Python creates the `Service` object
+
+Just like before, Python conceptually does:
+
+```python
+temp_service_obj = Service.__new__(Service)
+Service.__init__(temp_service_obj, self_cluster_obj)
+```
+
+Now we are **inside** `Service.__init__`, whose signature is:
+
+```python
+def __init__(self, val: "ClusterInstance") -> None:
+    print(val.PORT)
+```
+
+The parameter binding looks like this:
+
+| Name | What it refers to                          |
+|------|--------------------------------------------|
+| self | the **new `Service` object**               |
+| val  | the **`ClusterInstance` object** we passed |
+
+So when `Service.__init__` runs `print(val.PORT)`, it:
+
+- Looks up `PORT` on the `ClusterInstance` object.
+- Finds `ClusterInstance.PORT = 100`.
+- Prints `100`.
+
+##### Step 4 – Final mental model (very important)
+
+When you write:
+
+```python
+Service(self)
+```
+
+*inside* `ClusterInstance.__init__`, what happens in `Service.__init__` is:
+
+| In `Service.__init__(self, val)` | What it actually is                       |
+|----------------------------------|-------------------------------------------|
+| `self`                           | the **new `Service` instance**            |
+| `val`                            | the **`ClusterInstance` you passed in**   |
+
+This is **exactly** the same pattern you see in real projects when code does
+something like `GatekeeperService(self)` inside another class:
+
+- Class **A** creates an instance of class **B**.
+- It passes **itself** (A) into B’s constructor.
+- Inside B, that object becomes a normal parameter (often named `owner`,
+  `client`, `cluster`, etc.).
+
+Visually:
+
+```text
+ClusterInstance ----passes itself----> Service
+         ^                                   |
+         |-------------- "val" --------------|
+```
+
+#### 2.5.3 Why this always works the same way
+
+Python always follows these rules:
+
+- The **first parameter** of an instance method (`self` by convention) refers to
+  the object that owns the method.
+- Any extra arguments you pass in the call go into the **later parameters**.
+
+So for:
+
+```python
+Service(self)
+```
+
+Python binds:
+
+- `self` of `Service.__init__` → the **new `Service` object**.
+- `val` → the **`ClusterInstance`** you passed in.
+
+There is no special case, no hidden swap, and no hidden reference to the caller
+object. The same rules apply to every class and every method.
+
 ---
 
 ## 3. Classes as data containers (`@dataclass`)
@@ -1537,6 +1875,180 @@ would be rejected by a type checker, because `str` is not in the allowed set
 - At subclassing / instantiation time you pick **one** of the allowed types,
   and all uses of `HandleT` in that generic class must be consistent with that
   choice.
+
+
+#### 5.5.8 Q&A: `Generic[T]`, `Service[HandleT]` and "classes taking arguments"
+
+The questions behind this section were:
+
+- *Is `Generic[T]` a class? Is there no plain `Generic` without `T`?*
+- *If I want to use `Generic` in any project, do I always need `Generic[T]`?*
+- *When we write `class Service(ABC, Generic[HandleT])` and then
+  `Service[Popen[Any]]`, does that mean Python classes "accept an argument"
+  like functions?*
+
+Let's answer these explicitly.
+
+##### 1. Is `Generic[T]` a class? Can I use just `Generic`?
+
+Yes, `Generic` **is a real class** in `typing`.
+
+- `Generic` by itself is an **abstract base class for generic types** (as the
+  docs say).
+- `Generic[T]` (or `Generic[T, U]`, etc.) is that same class **parameterised by
+  one or more `TypeVar`s**.
+
+In practice you almost always use the **parameterised form**:
+
+- `class Box(Generic[ItemT])` – one type parameter.
+- `class Dictionary(Generic[K, V])` – two type parameters.
+
+You *could* technically write:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+from typing import Generic
+
+
+class Weird(Generic):  # legal but not useful
+    ...
+````
+</augment_code_snippet>
+
+but this does **not** declare any type parameter, so type checkers have
+nothing to work with. It is effectively the same (for typing purposes) as just
+inheriting from `object`.
+
+If you want a class to be **generic**, you must:
+
+1. Declare one or more `TypeVar`s (e.g. `HandleT = TypeVar("HandleT")`).
+2. Inherit from `Generic[HandleT]` (or `Generic[K, V]`, etc.).
+
+That is what turns `Service` / `Box` / `Dictionary` into a *template* that type
+checkers understand.
+
+##### 2. What does `class Service(ABC, Generic[HandleT])` really mean?
+
+When you write:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+from abc import ABC, abstractmethod
+from typing import Generic, TypeVar
+
+
+HandleT = TypeVar("HandleT")
+
+
+class Service(ABC, Generic[HandleT]):
+    @abstractmethod
+    def start(self) -> HandleT: ...
+
+    @abstractmethod
+    def stop(self, handle: HandleT) -> None: ...
+````
+</augment_code_snippet>
+
+you are doing two ordinary things at once:
+
+- **Normal inheritance** from `ABC` → this is an abstract base class.
+- **Normal inheritance** from `Generic[HandleT]` → this class has **one type
+  parameter** called `HandleT`.
+
+There is nothing “mystical” here – the parentheses list **base classes**, not
+function-style *arguments*. It's the same mechanism as:
+
+- `class Admin(User): ...`
+- `class Box(Generic[ItemT]): ...`
+
+Because of the `Generic[HandleT]` base class, type checkers treat `Service` as
+**generic over `HandleT`** – everywhere you see `HandleT` in annotations, that
+name can later be substituted with a concrete type.
+
+##### 3. What does `Service[Popen[Any]]` (or `ProcessService[psutil.Process]`) mean?
+
+This is where it is easy to think “classes are taking arguments like
+functions”. But the square brackets here are **type indexing**, not a normal
+function call.
+
+- `Service[HandleT]` is a **template**.
+- `Service[Popen[Any]]` is the same template with `HandleT` specialised to
+  `Popen[Any]` – just like `list[int]` is “a list whose elements are `int`”.
+
+Under the hood, classes like `list`, `dict`, and `Generic` implement
+`__class_getitem__`, which lets you write `MyClass[T]` in annotations.
+
+Important mental model:
+
+- **This does not pass a runtime argument.**
+- It creates a **specialised type** for the type system.
+
+You then use that specialised type when defining subclasses:
+
+<augment_code_snippet mode="EXCERPT">
+````python
+class PopenService(Service[Popen[Any]]):
+    ...  # here HandleT is effectively Popen[Any]
+
+
+class ProcessService(Service[psutil.Process]):
+    ...  # here HandleT is effectively psutil.Process
+````
+</augment_code_snippet>
+
+For a type checker, this means:
+
+- Inside `PopenService`, every `HandleT` is treated as `Popen[Any]`.
+- Inside `ProcessService`, every `HandleT` is treated as `psutil.Process`.
+- Calls like `PopenService().stop("oops")` become **type errors**, because
+  `"oops"` is not `Popen[Any]`.
+
+At **runtime**, however, Python does not enforce any of this; it is all extra
+information for tools (type checkers, IDEs, code readers).
+
+##### 4. Do Python classes “accept arguments” like functions?
+
+Not in the same sense.
+
+When you see:
+
+- `Service[Popen[Any]]` – this is **type specialisation** (static, checked by
+  tools).
+- `Service[Popen[Any]](...)` – this is **two steps**:
+  1. Specialise the type (`Service[HandleT]` → `Service[Popen[Any]]`).
+  2. Call the class to create an instance (normal `__init__` call).
+
+The only true *runtime* “arguments” for a class are the ones passed to
+`__init__` / `__new__`, just like any other constructor. Type parameters live in
+an entirely different (static) world.
+
+##### 5. How does this relate to the “two worlds” idea?
+
+You can think of generics as living in **two parallel worlds**:
+
+- **Runtime world (Python interpreter):**
+  - Classes, objects, methods, `__init__`, attributes.
+  - Code runs even if you delete all `TypeVar` / `Generic` / annotation code.
+- **Type-checker world (mypy, Pyright, IDE):**
+  - `TypeVar`, `Generic[T]`, `Service[Popen[Any]]`, `Box[int]`, etc. describe
+    relationships between types.
+  - Tools substitute `HandleT` / `ItemT` with concrete types and warn when they
+    are used inconsistently.
+
+So:
+
+- ✔ You can remove all generics and your program still **runs**.
+- ✔ Generics add **structure, documentation, and safety** for humans and
+  tools, especially in large codebases.
+- ✘ They do **not** change how the code executes step-by-step.
+
+A useful “arrow” diagram for this mental model is:
+
+- `TypeVar` → introduces a *name for an unknown type* (e.g. `HandleT`).
+- `Generic[T]` → defines a *generic blueprint* that uses that name.
+- `Service[HandleT]` / `Box[ItemT]` → reusable generic classes.
+- `PopenService(Service[Popen[Any]])` / `Box[int]` → **concrete
+  specialisations** picked for a particular use.
 
 
 ---

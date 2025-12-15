@@ -82,12 +82,182 @@ def greet(name):
 # greet = simple_decorator(greet)
 ```
 
+#### Deep dive: what actually happens to `greet`
+
+The key moment is this line:
+
+```python
+greet = simple_decorator(greet)
+```
+
+This is what Python does **under the hood** for:
+
+```python
+@simple_decorator
+def greet(name):
+    ...
+```
+
+At the start you have **one name, one function object**:
+
+```text
+greet  ───►  function greet(name)
+```
+
+**Step 1 – Call `simple_decorator(greet)`**
+
+You pass the **original** `greet` function into `simple_decorator`:
+
+- Inside `simple_decorator`, the parameter `func` refers to the original
+  `greet` function.
+
+**Step 2 – `simple_decorator` returns `wrapper`**
+
+Inside the decorator:
+
+```python
+def simple_decorator(func):
+    def wrapper(*args, **kwargs):
+        print(f"Before calling {func.__name__}")
+        result = func(*args, **kwargs)
+        print(f"After calling {func.__name__}")
+        return result
+    return wrapper
+```
+
+The `return wrapper` line means that the call:
+
+```python
+simple_decorator(greet)
+```
+
+evaluates to **the new `wrapper` function object**.
+
+**Step 3 – Assignment replaces the name `greet`**
+
+Now Python assigns that returned `wrapper` back to the name `greet`:
+
+```python
+greet = wrapper
+```
+
+So after decoration:
+
+```text
+greet  ───►  wrapper(*args, **kwargs)
+```
+
+The **original** `greet` function still exists, but it is now only reachable as
+`func` **inside the closure** of `wrapper`.
+
+Full picture:
+
+```text
+Before decoration:
+    greet   ───────►  [function greet(name)]
+
+After calling simple_decorator(greet):
+    wrapper ──────►  [function wrapper(...):
+                          calls func(...)
+                      ]
+    func    ───────►  original greet(name)
+
+After assignment greet = wrapper:
+    greet   ───────►  wrapper
+                       │
+                       └── inside wrapper: func = original greet
+```
+
+#### Call flow when you run `greet("Bob")`
+
+When you call:
+
+```python
+greet("Bob")
+```
+
+you are **actually calling the wrapper**, because `greet` now points to it:
+
+1. User calls `greet("Bob")`.
+2. Python calls `wrapper("Bob")`.
+3. `wrapper` prints `Before calling greet`.
+4. `wrapper` calls `func("Bob")` – this is the **original** `greet`.
+5. The original `greet` returns `"Hello, Bob!"`.
+6. `wrapper` prints `After calling greet`.
+7. `wrapper` returns `"Hello, Bob!"` to the caller.
+
+#### Final mental model
+
+- Decorators **do not modify** the original function object.
+- They **replace the function name** (like `greet`) with a **new wrapper
+  function**.
+- The wrapper **calls the original** via the closed-over `func` variable.
+
+So your mental model should be:
+
+```text
+greet  ==  wrapper   (after decoration)
+```
+
+and:
+
+```text
+inside wrapper: func == original greet
+```
+
 ### 🔑 Key Pattern
 
 ```
 decorator(function) -> wrapper function
 wrapper(*args, **kwargs) -> calls original function
 ```
+
+#### 2.1.1 Same mechanic without `@` syntax
+
+In the same file we also have a version **without** the `@` syntax:
+
+```python
+def say_goodbye(name: str) -> str:
+    """Say goodbye."""
+    return f"Goodbye, {name}!"
+
+
+# Manual decoration (without @)
+say_goodbye = simple_decorator(say_goodbye)  #  Same as @simple_decorator
+```
+
+This line:
+
+```python
+say_goodbye = simple_decorator(say_goodbye)
+```
+
+does **exactly the same thing** as writing:
+
+```python
+@simple_decorator
+def say_goodbye(name: str) -> str:
+    ...
+```
+
+So the same mental model applies:
+
+- Before decoration:
+
+  ```text
+  say_goodbye  ───►  function say_goodbye(name)
+  ```
+
+- After decoration:
+
+  ```text
+  say_goodbye  ───►  wrapper(...)
+                      │
+                      └── inside wrapper: func == original say_goodbye
+  ```
+
+The `@simple_decorator` form is just a **shorter spelling** for
+`name = simple_decorator(name)` at definition time.
 
 ### 2.2. Logging Decorator
 
@@ -244,6 +414,44 @@ def complex_operation(a, b):
 **Order**: Decorators are applied **bottom-to-top**:
 1. `log_calls` is applied first (innermost)
 2. `timer` is applied second (outermost)
+
+### 2.8 Visual summary – what decorators do to names
+
+You can think of decorators like this for both `greet` and `say_goodbye`.
+
+**Before decoration**
+
+```text
+greet       ───►  function greet(name)
+say_goodbye ───►  function say_goodbye(name)
+```
+
+**Decoration step**
+
+```python
+greet       = simple_decorator(greet)
+say_goodbye = simple_decorator(say_goodbye)
+```
+
+**After decoration**
+
+```text
+greet       ───►  wrapper(...)
+                    │
+                    └── inside wrapper: func == original greet
+
+say_goodbye ───►  wrapper(...)
+                    │
+                    └── inside wrapper: func == original say_goodbye
+```
+
+Same pattern, different original function:
+
+- The **name** (like `greet` or `say_goodbye`) now refers to `wrapper`.
+- The **original function** is captured in the closure as `func`.
+
+This is true whether you write it with `@simple_decorator` or with an
+explicit assignment.
 
 ### 💡 Basic Decorators Best Practices
 
