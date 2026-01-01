@@ -11,8 +11,8 @@
 
 1. [What are Fixtures?](#1-what-are-fixtures)
 2. [Basic Fixtures](#2-basic-fixtures)
-3. [Fixture Scopes](#3-fixture-scopes)
-4. [How Pytest Discovers and Runs Tests](#4-how-pytest-discovers-and-runs-tests)
+3. [How Pytest Discovers and Runs Tests](#3-how-pytest-discovers-and-runs-tests)
+4. [Fixture Scopes](#4-fixture-scopes)
 5. [Complete Fixture Scopes Example](#5-complete-fixture-scopes-example)
 6. [Fixture Dependencies](#6-fixture-dependencies)
 7. [Autouse Fixtures](#7-autouse-fixtures)
@@ -93,7 +93,116 @@ def database_connection():
 
 ---
 
-## 3. Fixture Scopes
+## 3. How Pytest Discovers and Runs Tests
+
+Before diving into the complete fixture scopes example, it's crucial to understand **how pytest automatically finds and runs your tests**.
+
+### 3.1. Test Discovery (Automatic)
+
+When you run `pytest`, it automatically:
+
+1. **Finds test files**: Looks for files matching `test_*.py` or `*_test.py`
+2. **Finds test classes**: Looks for classes named `Test*` (must start with "Test")
+3. **Finds test functions**: Looks for functions/methods named `test_*` (must start with "test_")
+
+### 3.2. You Never Instantiate Test Classes
+
+This is a common point of confusion. Consider this code:
+
+```python
+class TestFirst:
+    def test_a(self):
+        assert True
+    
+    def test_b(self):
+        assert True
+```
+
+**Question**: Where do we create `TestFirst()` and call the methods?
+
+**Answer**: **You don't!** Pytest does it automatically.
+
+### 3.3. What Happens Behind the Scenes
+
+When pytest finds the above code, it conceptually does this:
+
+```python
+# Pytest internally does something like this (simplified):
+test_instance_1 = TestFirst()  # Create instance for test_a
+test_instance_1.test_a()        # Call test_a
+
+test_instance_2 = TestFirst()  # Create NEW instance for test_b
+test_instance_2.test_b()        # Call test_b
+```
+
+**Important**: By default, pytest creates a **new instance** of the test class for **each test method**. This ensures test isolation.
+
+### 3.4. Seeing It in Action
+
+You can verify this by adding `__init__`:
+
+```python
+class TestExample:
+    def __init__(self):
+        print("TestExample instance created!")
+    
+    def test_one(self):
+        print("Running test_one")
+    
+    def test_two(self):
+        print("Running test_two")
+```
+
+**Output when running `pytest -s`:**
+```
+TestExample instance created!
+Running test_one
+.TestExample instance created!
+Running test_two
+.
+```
+
+Notice: **Two instances created** (one per test method)!
+
+### 3.5. Naming Conventions Matter
+
+ **These WILL be discovered:**
+```python
+# File: test_example.py or example_test.py
+class TestMyFeature:           # Starts with "Test"
+    def test_something(self):  # Starts with "test_"
+        pass
+
+def test_standalone():         # Starts with "test_"
+    pass
+```
+
+ **These will NOT be discovered:**
+```python
+# File: example.py (doesn't match pattern)
+class MyTest:                  # Doesn't start with "Test"
+    def check_something(self): # Doesn't start with "test_"
+        pass
+```
+
+### 3.6. Key Takeaway
+
+You **never** need to:
+- Import test classes
+- Instantiate test classes  
+- Call test methods
+- Create a main() function
+
+Pytest's **test runner** does all of this automatically by:
+1. Scanning files for naming patterns
+2. Collecting all tests
+3. Instantiating classes and calling methods
+4. Managing fixtures and dependencies
+5. Reporting results
+
+---
+
+## 4. Fixture Scopes
 
 Fixtures can have different **scopes** that control how often they are created and destroyed.
 
@@ -127,114 +236,215 @@ def session_fixture():
     pass
 ```
 
----
+### 4.1. Scope vs. Visibility (`scope="class"` and standalone functions)
 
-## 4. How Pytest Discovers and Runs Tests
+> **Key idea**: A fixture with `scope="class"` can still be used by a
+> **standalone test function**.
 
-Before diving into the complete fixture scopes example, it's crucial to understand **how pytest automatically finds and runs your tests**.
+**Fixture scope does *not* restrict where a fixture can be used.**
 
-### 4.1. Test Discovery (Automatic)
+- It only controls **how long the fixture instance lives**.
 
-When you run `pytest`, it automatically:
+#### The key misunderstanding
 
-1. **Finds test files**: Looks for files matching `test_*.py` or `*_test.py`
-2. **Finds test classes**: Looks for classes named `Test*` (must start with "Test")
-3. **Finds test functions**: Looks for functions/methods named `test_*` (must start with "test_")
+You might think:
 
-### 4.2. You Never Instantiate Test Classes
+> *"class scope means it can only be used inside a class"*
 
-This is a common point of confusion. Consider this code:
+But in pytest, **scope ≠ visibility**.
 
-```python
-class TestFirst:
-    def test_a(self):
-        assert True
-    
-    def test_b(self):
-        assert True
-```
+Fixture scope only answers:
 
-**Question**: Where do we create `TestFirst()` and call the methods?
+- *"How many times is this fixture created and destroyed?"*
 
-**Answer**: **You don't!** Pytest does it automatically.
+It does **not** answer:
 
-### 4.3. What Happens Behind the Scenes
+- *"Who is allowed to use this fixture?"*
 
-When pytest finds the above code, it conceptually does this:
+#### What `scope="class"` really means
 
 ```python
-# Pytest internally does something like this (simplified):
-test_instance_1 = TestFirst()  # Create instance for test_a
-test_instance_1.test_a()        # Call test_a
-
-test_instance_2 = TestFirst()  # Create NEW instance for test_b
-test_instance_2.test_b()        # Call test_b
+@pytest.fixture(scope="class")
+def get_class_db():
+    print("Opening DB connection")
 ```
 
-**Important**: By default, pytest creates a **new instance** of the test class for **each test method**. This ensures test isolation.
+This means:
 
-### 4.4. Seeing It in Action
+- **Create one fixture instance per test class**
+- Reuse that instance for **all tests within that class**
 
-You can verify this by adding `__init__`:
+But when a **function test** uses it:
 
 ```python
-class TestExample:
-    def __init__(self):
-        print("TestExample instance created!")
-    
-    def test_one(self):
-        print("Running test_one")
-    
-    def test_two(self):
-        print("Running test_two")
+def test_sample_fixture(get_class_db):
+    ...
 ```
 
-**Output when running `pytest -s`:**
-```
-TestExample instance created!
-Running test_one
-.TestExample instance created!
-Running test_two
-.
-```
+pytest treats the function itself as a **"class-like" scope unit** for this
+fixture. It will:
 
-Notice: **Two instances created** (one per test method)!
+- Create **one instance just for that test function**
+- Use it for that test
+- Then tear it down according to its scope rules
 
-### 4.5. Naming Conventions Matter
+Result: **No error, perfectly valid usage.**
 
-✅ **These WILL be discovered:**
+#### Why pytest allows this (design reason)
+
+Pytest fixtures are designed to be:
+
+- **Dependency injection**
+- **Decoupled from test structure**
+- **Designed for reuse**
+
+A fixture describes:
+
+- *"How to get a resource"*
+
+Not:
+
+- *"Who is allowed to use this resource"*
+
+#### Example: `scope="class"` fixture used in a class *and* a standalone function
+
 ```python
-# File: test_example.py or example_test.py
-class TestMyFeature:           # Starts with "Test"
-    def test_something(self):  # Starts with "test_"
-        pass
+import pytest
 
-def test_standalone():         # Starts with "test_"
-    pass
+
+@pytest.fixture(scope="class")
+def get_class_db():
+    print("Opening DB connection 1")
+    yield 10
+    print("Closing DB connection 1")
+
+
+@pytest.fixture()
+def get_class_db_2():
+    print("Opening DB connection 2")
+    yield
+    print("Closing DB connection 2")
+
+
+class TestDb:
+    def test_connection(self, get_class_db, get_class_db_2):
+        print("inside test_connection, yielded value = ", get_class_db)
+
+    def test_close(self, get_class_db):
+        print("inside test_close")
+
+
+def test_sample_fixture(get_class_db):
+    print("running test_sample_fixture")
 ```
 
-❌ **These will NOT be discovered:**
-```python
-# File: example.py (doesn't match pattern)
-class MyTest:                  # Doesn't start with "Test"
-    def check_something(self): # Doesn't start with "test_"
-        pass
-```
+Here:
 
-### 4.6. Key Takeaway
+- `get_class_db` is **class-scoped** and **yields a value** (`10`).
+- `get_class_db_2` is a **function-scoped** fixture used only inside
+  `TestDb.test_connection`.
+- `TestDb` has two methods that both request `get_class_db`.
+- There is also a **standalone test function** `test_sample_fixture` that uses
+  the same `get_class_db` fixture.
 
-You **never** need to:
-- Import test classes
-- Instantiate test classes  
-- Call test methods
-- Create a main() function
+##### What happens step-by-step
 
-Pytest's **test runner** does all of this automatically by:
-1. Scanning files for naming patterns
-2. Collecting all tests
-3. Instantiating classes and calling methods
-4. Managing fixtures and dependencies
-5. Reporting results
+Lets look at the conceptual execution order.
+
+1. **First test needing `get_class_db` starts**
+
+   - When the first test in `TestDb` that requires `get_class_db` is about to
+     run, pytest notices that this class needs a class-scoped fixture.
+
+2. **Class-scoped fixture setup runs once for the class**
+
+   - `get_class_db` setup executes:
+
+     ```text
+     Opening DB connection 1
+     ```
+
+   - The yielded value `10` is stored internally by pytest as the fixture value
+     for this **class scope**.
+
+3. **`TestDb.test_connection` runs**
+
+   - Before the test body, pytest sets up `get_class_db_2` (function-scoped):
+
+     ```text
+     Opening DB connection 2
+     ```
+
+   - Then the test body runs:
+
+     ```text
+     inside test_connection, yielded value =  10
+     ```
+
+   - After the test body finishes, pytest tears down `get_class_db_2`:
+
+     ```text
+     Closing DB connection 2
+     ```
+
+4. **`TestDb.test_close` runs**
+
+   - This test also requests `get_class_db`.
+   - Because `get_class_db` is **class-scoped**, pytest **reuses the same
+     instance and value (`10`) created in step 2**.
+   - There is **no new setup** for `get_class_db` while tests in the same class
+     are still running.
+   - Only the test body runs:
+
+     ```text
+     inside test_close
+     ```
+
+5. **After the last test in `TestDb` finishes**
+
+   - Pytest now tears down the class-scoped fixture `get_class_db` **once** for
+     this class:
+
+     ```text
+     Closing DB connection 1
+     ```
+
+6. **Standalone function `test_sample_fixture` runs**
+
+   - Even though `get_class_db` has `scope="class"`, the standalone function is
+     allowed to use it.
+   - For this function, pytest treats it as its **own class-like scope unit**:
+
+     - It runs the setup for `get_class_db` again (a new instance for this
+       function):
+
+       ```text
+       Opening DB connection 1
+       ```
+
+     - The test body runs:
+
+       ```text
+       running test_sample_fixture
+       ```
+
+     - Then teardown for this scope runs:
+
+       ```text
+       Closing DB connection 1
+       ```
+
+##### Key takeaways from this example
+
+- `scope="class"` controls **lifetime and reuse**, not **where** the fixture may
+  be used.
+- Inside a test class, the fixture is **created once** and **shared** across all
+  tests in that class.
+- A standalone function can still request a class-scoped fixture; pytest
+  creates a **separate instance** for that function and tears it down after the
+  function completes.
+- Additional fixtures like `get_class_db_2` (function-scoped) can layer on top
+  of this, with their own setup/teardown around each individual test.
 
 ---
 
@@ -645,6 +855,123 @@ def test_api_call(api_client):
     response = api_client.get("/users")
     assert response.status_code == 200
 ```
+
+### 6.3. Multiple Fixtures, Call Order, and `yield`
+
+Consider this example with two fixtures and a test class:
+
+```python
+import pytest
+
+"""
+@pytest.fixture(scope="class")
+def get_class_db():
+    print("Opening DB connection")
+"""
+
+@pytest.fixture()
+def get_class_db():
+    print("Opening DB connection 1")
+    yield
+    print("Closing DB connection 1")
+
+
+@pytest.fixture()
+def get_class_db_2():
+    print("Opening DB connection 2")
+
+
+class TestDb:
+    def test_connection(self, get_class_db, get_class_db_2):
+        print("inside test_connection")
+
+    def test_close(self, get_class_db):
+        print("inside test_close")
+```
+
+#### 1) Is fixture calling order left-to-right?
+
+Not guaranteed. In practice it often looks left-to-right, but pytest’s guarantee is:
+
+- A fixture runs **after all of its own dependencies are ready**.
+
+Between multiple **independent** fixtures requested by a test, pytest does **not**
+promise the order is the same as the argument list.
+
+So you should **never rely on argument order** for side effects (like
+“open DB 1 must run before DB 2”).
+
+If you need an order, **express it as a dependency**.
+
+#### 2) Why doesn’t `yield` “continue into the test” immediately?
+
+It does — but only **after pytest has finished setting up all fixtures needed for
+that test**.
+
+Think of `yield` fixtures like this:
+
+- Code **before** `yield` = **setup phase**
+- The `yield` point = “fixture is ready” (value returned to the test)
+- Code **after** `yield` = **teardown phase** (runs after the test finishes)
+
+For the test method:
+
+```python
+def test_connection(self, get_class_db, get_class_db_2):
+    print("inside test_connection")
+```
+
+pytest does roughly:
+
+1. Setup `get_class_db` (prints `"Opening DB connection 1"`, then stops at `yield`)
+2. Setup `get_class_db_2` (prints `"Opening DB connection 2"`)
+3. Run the test body (prints `"inside test_connection"`)
+4. Teardown in **reverse order** of setup for `yield` fixtures:
+   - `get_class_db` resumes **after** `yield` and prints `"Closing DB connection 1"`
+   - (`get_class_db_2` has no `yield`, so there’s no teardown)
+
+So it is expected that `get_class_db_2` runs before the test body, even though
+`get_class_db` already hit `yield`.
+
+#### 3) Enforcing an order with fixture dependencies
+
+If you want “DB 2 must be created **after** DB 1”, make `get_class_db_2`
+**depend on** `get_class_db`:
+
+```python
+@pytest.fixture()
+def get_class_db():
+    print("Opening DB connection 1")
+    yield
+    print("Closing DB connection 1")
+
+
+@pytest.fixture()
+def get_class_db_2(get_class_db):   # dependency enforces order
+    print("Opening DB connection 2")
+```
+
+Now pytest must do:
+
+- DB1 setup → DB2 setup → test → DB1 teardown.
+
+#### 4) Adding teardown for the second connection
+
+In the original example, `get_class_db_2` has no teardown. If it’s actually a
+“connection”, you probably want symmetric cleanup:
+
+```python
+@pytest.fixture()
+def get_class_db_2(get_class_db):
+    print("Opening DB connection 2")
+    yield
+    print("Closing DB connection 2")
+```
+
+Then teardown will be in reverse order of setup:
+
+- Close DB 2
+- Close DB 1
 
 ---
 
