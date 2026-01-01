@@ -56,6 +56,51 @@ def test_add(a, b, expected):
 3. **Clear test output**: Each parameter set shows as a separate test
 4. **Better coverage**: Encourages testing more cases
 
+### How It Works Under the Hood
+
+When you use `@pytest.mark.parametrize`, pytest automatically runs the test
+function **multiple times** — once for each set of parameter values you define.
+
+**You write one test function**, but **pytest runs it N times**:
+
+```python
+@pytest.mark.parametrize("a, b, expected", [
+    (2, 3, 5),
+    (5, 7, 12),
+    (10, 20, 30),
+])
+def test_add(a, b, expected):
+    assert add(a, b) == expected
+```
+
+| Run | `a` | `b` | `expected` | What pytest checks |
+|-----|-----|-----|------------|-------------------|
+| 1 | 2 | 3 | 5 | `add(2, 3) == 5` ✅ |
+| 2 | 5 | 7 | 12 | `add(5, 7) == 12` ✅ |
+| 3 | 10 | 20 | 30 | `add(10, 20) == 30` ✅ |
+
+If you run it with verbose output (`pytest -v`), you'll see:
+
+```
+test_add.py::test_add[2-3-5] PASSED
+test_add.py::test_add[5-7-12] PASSED
+test_add.py::test_add[10-20-30] PASSED
+```
+
+Each parameter combination becomes a **separate test case**.
+
+#### Key Insight
+
+Even though you call `test_add()` once in your code, pytest:
+
+1. Reads the parameter list from `@pytest.mark.parametrize`
+2. Creates a separate test run for each tuple
+3. Injects the values (`a`, `b`, `expected`) into the function for each run
+4. Reports each run as an independent test result
+
+This is why one failing parameter set doesn't stop the others from running —
+they are truly separate test executions.
+
 ---
 
 ## 2. Basic Parametrize

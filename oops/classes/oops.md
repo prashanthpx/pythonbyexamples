@@ -9,6 +9,15 @@ examples biased toward:
 We’ll build this in **phases**, from core syntax to patterns you see in
 production code.
 
+You can read it straight through, or jump to the part you care about:
+
+- [1. Why classes in real projects?](#1-why-classes-in-real-projects)
+- [2. Core building blocks (beginner)](#2-core-building-blocks-beginner)
+- [3. Classes as data containers (@dataclass)](#3-classes-as-data-containers-dataclass)
+- [4. Classes in CLI tools & automation scripts](#4-classes-in-cli-tools--automation-scripts)
+- [5. Inheritance and polymorphism](#5-inheritance-and-polymorphism-simple-real-world-style)
+- [6. Encapsulation with properties (@property)](#6-encapsulation-with-properties-property)
+
 ---
 
 ## 1. Why classes in real projects?
@@ -37,11 +46,19 @@ The rest of this guide focuses on these *practical* uses.
 
 ## 2. Core building blocks (beginner)
 
+This section builds a solid mental model of **what a class is** and how
+instances are created. By the end you should be comfortable with:
+
+- writing a class and its `__init__` method (the *initializer*),
+- the difference between **instance attributes** and **class attributes**,
+- when to use **instance**, **class**, and **static** methods,
+- what really happens when you call `MyClass(...)` and how `self` is bound.
+
 ### 2.1. Defining and instantiating a class
 
 The smallest useful class groups some data and operations together.
 
-<augment_code_snippet path="practice/oops/classes/oops.md" mode="EXCERPT">
+
 ````python
 class TodoItem:
     def __init__(self, title: str, done: bool = False) -> None:
@@ -51,7 +68,7 @@ class TodoItem:
     def mark_done(self) -> None:
         self.done = True
 ````
-</augment_code_snippet>
+ 
 
 Usage:
 
@@ -64,12 +81,21 @@ Key ideas:
 - `self` is a reference to *this* instance.
 - Attributes like `self.title` and `self.done` hold state.
 
+In many languages you will hear the word **constructor**. In Python, that is
+conceptually split into two steps: `__new__` (low-level object allocation) and
+`__init__` (initialising the new object). In everyday code you almost always
+only implement `__init__`. Section [2.5](#25-how-object-creation-and-self-really-work-__new-__init-and-argument-binding)
+shows the full picture, but for now you can think:
+
+- *"Calling `TodoItem(...)` creates a new object and then calls my
+  `__init__` to set it up."*
+
 ### 2.2. Instance vs class attributes
 
 Classes can have attributes shared by all instances (**class attributes**) and
 attributes unique to each instance (**instance attributes**).
 
-<augment_code_snippet path="practice/oops/classes/oops.md" mode="EXCERPT">
+
 ````python
 class Config:
     # Class attribute: shared default
@@ -79,7 +105,6 @@ class Config:
         # Instance attribute: specific to this Config
         self.timeout = timeout if timeout is not None else self.DEFAULT_TIMEOUT
 ````
-</augment_code_snippet>
 
 - `Config.DEFAULT_TIMEOUT` is on the class.
 - `config.timeout` is on the instance.
@@ -96,7 +121,7 @@ In real projects, class attributes are often used for **constants or defaults**.
 >
 > Small demo: `oops/classes/class_vs_instance_name_shadowing.py`.
 
-<augment_code_snippet path="oops/classes/class_vs_instance_name_shadowing.py" mode="EXCERPT">
+
 ````python
 class User:
     name: str = "class-default"  # class attribute
@@ -104,7 +129,7 @@ class User:
     def __init__(self, name: str) -> None:
         self.name = name          # instance attribute
 ````
-</augment_code_snippet>
+
 
 After `u1 = User("Alice")` and `u2 = User("Bob")`:
 
@@ -134,7 +159,6 @@ You will often see three method types in real code:
 >   either `self` or `cls`, but you want it grouped with the class for
 >   organization.
 
-<augment_code_snippet path="practice/oops/classes/oops.md" mode="EXCERPT">
 ````python
 class User:
     def __init__(self, email: str, active: bool = True) -> None:
@@ -150,7 +174,7 @@ class User:
     def is_valid_email(email: str) -> bool:
         return "@" in email and "." in email
 ````
-</augment_code_snippet>
+
 
 Where this shows up in projects:
 
@@ -163,7 +187,7 @@ Example file: `oops/classes/classmethod_examples.py`.
 
 A simplified version of the first part:
 
-<augment_code_snippet path="oops/classes/classmethod_examples.py" mode="EXCERPT">
+
 ````python
 class CounterInstanceStyle:
     class_count: int = 0
@@ -171,9 +195,9 @@ class CounterInstanceStyle:
     def print_class_count(self) -> None:
         print(f"[instance] class_count = {CounterInstanceStyle.class_count}")
 ````
-</augment_code_snippet>
 
-<augment_code_snippet path="oops/classes/classmethod_examples.py" mode="EXCERPT">
+
+
 ````python
 class CounterClassMethod:
     class_count: int = 0
@@ -182,7 +206,7 @@ class CounterClassMethod:
     def print_class_count(cls) -> None:
         print(f"[classmethod] {cls.__name__}.class_count = {cls.class_count}")
 ````
-</augment_code_snippet>
+
 
 Key takeaways:
 
@@ -228,7 +252,7 @@ Typical patterns:
 
 One small example from `oops/classes/classmethod_examples.py`:
 
-<augment_code_snippet path="oops/classes/classmethod_examples.py" mode="EXCERPT">
+
 ````python
 class UserWithAltConstructor:
     def __init__(self, full_name: str) -> None:
@@ -238,7 +262,7 @@ class UserWithAltConstructor:
     def from_first_last(cls, first: str, last: str) -> "UserWithAltConstructor":
         return cls(f"{first} {last}")
 ````
-</augment_code_snippet>
+
 
 The key idea: the **class** owns the object-creation details; callers just pick
 the right constructor name based on where their data comes from.
@@ -251,7 +275,7 @@ designs:
 - `RetryPolicy` – keeps `__init__` general and offers presets via
   `default()`, `fast()`, `slow()` classmethods.
 
-<augment_code_snippet path="oops/classes/retry_policy_examples.py" mode="EXCERPT">
+
 ````python
 class RetryPolicy:
     def __init__(self, attempts: int, delay: float) -> None:
@@ -262,7 +286,7 @@ class RetryPolicy:
     def default(cls) -> "RetryPolicy":
         return cls(attempts=3, delay=1.0)
 ````
-</augment_code_snippet>
+
 
 Key differences:
 
@@ -301,7 +325,7 @@ endpoint**) and you are not sure **where to put that logic**:
 In this example, the `fetch_users_with_inner_helper` method defines a local
 helper function `make_url` inside itself:
 
-<augment_code_snippet path="oops/classes/method_helper_placement_example.py" mode="EXCERPT">
+
 ````python
 class ApiClient:
     def fetch_users_with_inner_helper(self) -> None:
@@ -309,7 +333,7 @@ class ApiClient:
             return f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
         url = make_url("/users")
 ````
-</augment_code_snippet>
+
 
 **Topology**: *“a method defines another function inside it”*.
 
@@ -328,7 +352,7 @@ Limitations:
 
 Here we move the helper to a **private instance method** so it can be reused:
 
-<augment_code_snippet path="oops/classes/method_helper_placement_example.py" mode="EXCERPT">
+
 ````python
 class ApiClient:
     def _make_api_url(self, endpoint: str) -> str:
@@ -337,7 +361,7 @@ class ApiClient:
     def fetch_users_with_private_method(self) -> None:
         url = self._make_api_url("/users")
 ````
-</augment_code_snippet>
+
 
 Key points:
 
@@ -355,7 +379,7 @@ This is usually the best default **inside one class hierarchy**: clear, testable
 If the helper does **not need `self` or `cls` at all**, you can make it a
 `@staticmethod`:
 
-<augment_code_snippet path="oops/classes/method_helper_placement_example.py" mode="EXCERPT">
+
 ````python
 class ApiClient:
     @staticmethod
@@ -365,7 +389,7 @@ class ApiClient:
     def fetch_users_with_static_helper(self) -> None:
         url = self._join_url(self.base_url, "/users")
 ````
-</augment_code_snippet>
+
 
 Key ideas:
 
@@ -384,7 +408,7 @@ You could also make `_join_url` a **module-level** function; whether you use a
 Classmethods are most useful when you want an **alternate constructor** or need
 to work with **class-level configuration**, not for tiny helpers:
 
-<augment_code_snippet path="oops/classes/method_helper_placement_example.py" mode="EXCERPT">
+
 ````python
 class ApiClient:
     @classmethod
@@ -392,7 +416,7 @@ class ApiClient:
         default_base = "https://api.example.com"
         return cls(default_base)
 ````
-</augment_code_snippet>
+
 
 Here:
 
@@ -477,7 +501,7 @@ Example file: `oops/classes/object_creation_self_binding_example.py`.
 In the example, `ClusterInstance` has a class attribute `PORT` and, inside its
 constructor, it creates a `Service` and passes itself in:
 
-<augment_code_snippet path="oops/classes/object_creation_self_binding_example.py" mode="EXCERPT">
+
 ````python
 class Service:
     def __init__(self, val: "ClusterInstance") -> None:
@@ -490,7 +514,7 @@ class ClusterInstance:
     def __init__(self) -> None:
         self.g = Service(self)
 ````
-</augment_code_snippet>
+
 
 And then we construct a `ClusterInstance`:
 
@@ -631,6 +655,182 @@ configuration, small domain objects, results from functions, etc.
 
 Instead of writing `__init__` by hand every time, Python offers `@dataclass`.
 
+### What is `@dataclass`?
+
+`@dataclass` is a Python shortcut for writing simple classes whose main job is
+to **store data**.
+
+Think of it as:
+
+> "Python, please write the boring class code for me."
+
+#### Layman explanation
+
+Normally, when you create a class to hold data, you must write:
+
+- an initializer (`__init__`)
+- maybe `__repr__` (for printing)
+- maybe `__eq__` (for comparisons)
+
+`@dataclass` **auto-generates all of that** from the fields you declare.
+
+#### With `@dataclass` (clean, Pythonic)
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class User:
+    name: str
+    age: int
+```
+
+That's it.
+
+Python automatically creates:
+
+- `__init__(self, name, age)`
+- `__repr__`
+- `__eq__`
+
+#### 🔍 What exactly does `@dataclass` generate?
+
+By default:
+
+| Method | Purpose |
+|--------|---------|
+| `__init__` | Constructor |
+| `__repr__` | Pretty printing |
+| `__eq__` | Equality comparison |
+
+#### Example usage
+
+```python
+u1 = User("Alice", 30)
+u2 = User("Alice", 30)
+
+print(u1)
+# User(name='Alice', age=30)
+
+print(u1 == u2)
+# True
+```
+
+#### How to remember `@dataclass`
+
+Think:
+
+> **data + class = dataclass**
+
+Or:
+
+> "Like a struct in C / Go, but Pythonic"
+
+#### What is `@dataclass` — super simple
+
+Think of `@dataclass` as:
+
+> A neat, labeled box to store related values
+
+Instead of remembering:
+
+- "name" means user name
+- "age" means user age
+
+You say:
+
+- this thing **has** a name
+- this thing **has** an age
+
+### Could you use a dictionary instead?
+
+✅ Yes — but there are trade-offs.
+
+#### Dictionary version
+
+```python
+user = {
+    "name": "Alice",
+    "age": 30
+}
+
+print(user["name"])
+```
+
+This works.
+
+So why bother with `@dataclass`?
+
+#### What goes wrong with dictionaries (real problems)
+
+##### ❌ Typos are silent
+
+```python
+user["naem"]   # KeyError at runtime
+```
+
+Dataclass:
+
+```python
+u.naem         # IDE/type checker catches this
+```
+
+##### ❌ No guarantee what keys exist
+
+```python
+def print_user(user):
+    print(user["name"])
+```
+
+What if someone passes:
+
+```python
+{"age": 40}
+```
+
+💥 Runtime error.
+
+Dataclass:
+
+```python
+def print_user(user: User):
+    print(user.name)
+```
+
+Now Python tools **know** what a `User` must have.
+
+### What is `__repr__` in plain English?
+
+`__repr__` answers this question:
+
+> "If I print this object, what should it look like?"
+
+#### When is `__repr__` used (without you calling it)?
+
+##### ✅ 1. `print()`
+
+```python
+u = User("Alice", 30)
+print(u)
+```
+
+Output:
+
+```
+User(name='Alice', age=30)
+```
+
+Without `@dataclass` (and without defining `__repr__` yourself), `print(u)`
+would show something unhelpful like:
+
+```
+<__main__.User object at 0x7f...>
+```
+
+`@dataclass` gives you the nice, readable output for free.
+
+---
+
 ### 3.1. Configuration and results as dataclasses
 
 Here is a small example taken from a CLI/automation context.
@@ -640,9 +840,9 @@ We define:
 - `JobConfig` – configuration for a backup/cleanup job.
 - `JobResult` – what happened when we ran the job.
 
-The code lives in: `practice/oops/classes/dataclass_config_example.py`.
+The code lives in: `oops/classes/dataclass_config_example.py`.
 
-<augment_code_snippet path="practice/oops/classes/dataclass_config_example.py" mode="EXCERPT">
+
 ````python
 from dataclasses import dataclass, field
 
@@ -656,11 +856,11 @@ class JobConfig:
     retries: int = 3
     tags: list[str] = field(default_factory=list)
 ````
-</augment_code_snippet>
+
 
 `JobResult` is another dataclass that groups the outcome:
 
-<augment_code_snippet path="practice/oops/classes/dataclass_config_example.py" mode="EXCERPT">
+
 ````python
 @dataclass
 class JobResult:
@@ -671,11 +871,11 @@ class JobResult:
     ok: bool
     error: "str | None" = None
 ````
-</augment_code_snippet>
+
 
 The `run_job` function returns a `JobResult` and prints some information:
 
-<augment_code_snippet path="practice/oops/classes/dataclass_config_example.py" mode="EXCERPT">
+
 ````python
 def run_job(config: JobConfig) -> JobResult:
     print(f"Running job '{config.name}' (dry_run={config.dry_run})")
@@ -687,11 +887,11 @@ def run_job(config: JobConfig) -> JobResult:
 
     return JobResult(config=config, files_processed=files_processed, ok=ok, error=error)
 ````
-</augment_code_snippet>
+
 
 And in the `__main__` block we construct a config, run the job, and print both:
 
-<augment_code_snippet path="practice/oops/classes/dataclass_config_example.py" mode="EXCERPT">
+
 ````python
 if __name__ == "__main__":
     config = JobConfig(name="daily-backup", dry_run=True, tags=["test", "backup"])
@@ -700,11 +900,11 @@ if __name__ == "__main__":
     print("Config:", config)
     print("Result:", result)
 ````
-</augment_code_snippet>
+
 
 ### 3.2. Real output from running the example
 
-From inside `practice/oops/classes`:
+From inside `oops/classes`:
 
 ```bash
 python3 dataclass_config_example.py
@@ -712,13 +912,13 @@ python3 dataclass_config_example.py
 
 Captured output (stored in the `output` variable in that file):
 
-<augment_code_snippet path="practice/oops/classes/dataclass_config_example.py" mode="EXCERPT">
+
 ````text
 Running job 'daily-backup' (dry_run=True)
 Config: JobConfig(name='daily-backup', dry_run=True, retries=3, tags=['test', 'backup'])
 Result: JobResult(config=JobConfig(name='daily-backup', dry_run=True, retries=3, tags=['test', 'backup']), files_processed=42, ok=True, error=None)
 ````
-</augment_code_snippet>
+
 
 This is a realistic pattern you will see in many codebases:
 
@@ -739,11 +939,11 @@ One of the most common real uses of classes is to structure CLI tools:
 
 ### 4.1. A simple `clean` command as a class
 
-Example file: `practice/oops/classes/cli_runner_example.py`
+Example file: `oops/classes/cli_runner_example.py`
 
 We start with a small configuration dataclass:
 
-<augment_code_snippet path="practice/oops/classes/cli_runner_example.py" mode="EXCERPT">
+
 ````python
 from dataclasses import dataclass
 from pathlib import Path
@@ -756,11 +956,11 @@ class CleanConfig:
     root: Path
     dry_run: bool = False
 ````
-</augment_code_snippet>
+
 
 Then we define a `CleanCommand` class whose `run()` method implements the logic:
 
-<augment_code_snippet path="practice/oops/classes/cli_runner_example.py" mode="EXCERPT">
+
 ````python
 class CleanCommand:
     """Command object representing 'clean temp files' in a CLI."""
@@ -785,11 +985,11 @@ class CleanCommand:
         print("[CLEAN] done")
         return 0
 ````
-</augment_code_snippet>
+
 
 In the `__main__` block we wire it up like a real CLI entry point:
 
-<augment_code_snippet path="practice/oops/classes/cli_runner_example.py" mode="EXCERPT">
+
 ````python
 if __name__ == "__main__":
     config = CleanConfig(root=Path("/tmp/myproject"), dry_run=True)
@@ -797,11 +997,11 @@ if __name__ == "__main__":
     exit_code = cmd.run()
     print("exit_code:", exit_code)
 ````
-</augment_code_snippet>
+
 
 ### 4.2. Real output from running the CLI example
 
-From inside `practice/oops/classes`:
+From inside `oops/classes`:
 
 ```bash
 python3 cli_runner_example.py
@@ -809,7 +1009,7 @@ python3 cli_runner_example.py
 
 Actual output (also stored in the `output` variable in that file):
 
-<augment_code_snippet path="practice/oops/classes/cli_runner_example.py" mode="EXCERPT">
+
 ````text
 [CLEAN] root=/tmp/myproject dry_run=True
 DRY-RUN delete: /tmp/myproject/file1.tmp
@@ -817,7 +1017,7 @@ DRY-RUN delete: /tmp/myproject/file2.tmp
 [CLEAN] done
 exit_code: 0
 ````
-</augment_code_snippet>
+
 
 This pattern scales directly to larger tools:
 
@@ -838,11 +1038,11 @@ subcommands (e.g. `clean`, `build`, `deploy`). A common pattern is:
 - One subclass per concrete command, e.g. `CleanCommand`, `BuildCommand`.
 - A **dispatcher** function that picks the right command class.
 
-Example file: `practice/oops/classes/multi_command_cli_example.py`
+Example file: `oops/classes/multi_command_cli_example.py`
 
 We define configurations for each command:
 
-<augment_code_snippet path="practice/oops/classes/multi_command_cli_example.py" mode="EXCERPT">
+
 ````python
 @dataclass
 class CleanConfig:
@@ -859,11 +1059,11 @@ class BuildConfig:
     root: Path
     target: str = "dev"
 ````
-</augment_code_snippet>
+
 
 Then a small `Command` base class and two concrete commands:
 
-<augment_code_snippet path="practice/oops/classes/multi_command_cli_example.py" mode="EXCERPT">
+
 ````python
 class Command:
     """Base class for CLI commands."""
@@ -881,11 +1081,11 @@ class CleanCommand(Command):
         # ...
         return 0
 ````
-</augment_code_snippet>
+
 
 The dispatcher chooses which command to run based on a name:
 
-<augment_code_snippet path="practice/oops/classes/multi_command_cli_example.py" mode="EXCERPT">
+
 ````python
 def run_command(command_name: str) -> int:
     if command_name == "clean":
@@ -901,11 +1101,11 @@ def run_command(command_name: str) -> int:
     print(f"[DISPATCH] running '{command_name}'")
     return cmd.run()
 ````
-</augment_code_snippet>
+
 
 ### 4.4. Real output from the multi-command example
 
-From inside `practice/oops/classes`:
+From inside `oops/classes`:
 
 ```bash
 python3 multi_command_cli_example.py
@@ -913,7 +1113,7 @@ python3 multi_command_cli_example.py
 
 Output (also captured in the `output` variable in that file):
 
-<augment_code_snippet path="practice/oops/classes/multi_command_cli_example.py" mode="EXCERPT">
+
 ````text
 [DISPATCH] running 'clean'
 [CLEAN] root=/tmp/myproject dry_run=True
@@ -930,7 +1130,7 @@ exit_code: 0
 Unknown command: deploy
 exit_code: 1
 ````
-</augment_code_snippet>
+
 
 This mirrors how tools like `git`, `kubectl`, or custom internal CLIs are
 structured:
@@ -960,11 +1160,11 @@ This section makes those ideas explicit with a small automation example.
 
 ### 5.1. Base class and subclasses
 
-Example file: `practice/oops/classes/inheritance_polymorphism_example.py`
+Example file: `oops/classes/inheritance_polymorphism_example.py`
 
 We start with a simple `Task` dataclass and a base `TaskHandler`:
 
-<augment_code_snippet path="practice/oops/classes/inheritance_polymorphism_example.py" mode="EXCERPT">
+
 ````python
 @dataclass
 class Task:
@@ -980,12 +1180,12 @@ class TaskHandler:
     def handle(self, task: Task) -> None:
         raise NotImplementedError
 ````
-</augment_code_snippet>
+
 
 Then we create two concrete handlers that **inherit** from `TaskHandler` and
 **override** `handle()`:
 
-<augment_code_snippet path="practice/oops/classes/inheritance_polymorphism_example.py" mode="EXCERPT">
+
 ````python
 class EmailTaskHandler(TaskHandler):
     def __init__(self, email: str) -> None:
@@ -1002,7 +1202,7 @@ class SlackTaskHandler(TaskHandler):
     def handle(self, task: Task) -> None:
         print(f"[SLACK] Posting '{task.description}' to channel {self._channel}")
 ````
-</augment_code_snippet>
+
 
 ### 5.2. Polymorphism in action
 
@@ -1010,17 +1210,17 @@ Now we write a function that accepts a list of `TaskHandler` objects and calls
 `handle()` on each one. It does **not** care whether it got an
 `EmailTaskHandler` or `SlackTaskHandler`.
 
-<augment_code_snippet path="practice/oops/classes/inheritance_polymorphism_example.py" mode="EXCERPT">
+
 ````python
 def process_task_with_all_handlers(handlers: List[TaskHandler], task: Task) -> None:
     for handler in handlers:
         handler.handle(task)
 ````
-</augment_code_snippet>
+
 
 In the `__main__` block we create one `Task` and two handlers:
 
-<augment_code_snippet path="practice/oops/classes/inheritance_polymorphism_example.py" mode="EXCERPT">
+
 ````python
 if __name__ == "__main__":
     task = Task(id=1, description="Deploy new version")
@@ -1032,7 +1232,7 @@ if __name__ == "__main__":
 
     process_task_with_all_handlers(handlers, task)
 ````
-</augment_code_snippet>
+
 
 This is **runtime polymorphism**:
 
@@ -1056,7 +1256,7 @@ seen in type-checked Python code:
 
 For example, with shapes:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 from typing import override
 
@@ -1071,7 +1271,7 @@ class Square(Shape):
     def area(self) -> float:  # type checkers verify this really overrides
         return 4 * 4
 ````
-</augment_code_snippet>
+
 
 If you accidentally wrote `def areaaaa(self)` by mistake, `@override` would let
 type checkers warn you that you are *not* actually overriding anything. The
@@ -1098,7 +1298,7 @@ So in practice:
 
 ### 5.3. Real output from the inheritance/polymorphism example
 
-From inside `practice/oops/classes`:
+From inside `oops/classes`:
 
 ```bash
 python3 inheritance_polymorphism_example.py
@@ -1106,12 +1306,12 @@ python3 inheritance_polymorphism_example.py
 
 Output (also captured in the `output` variable in that file):
 
-<augment_code_snippet path="practice/oops/classes/inheritance_polymorphism_example.py" mode="EXCERPT">
+
 ````text
 [EMAIL] Sending 'Deploy new version' to dev-team@example.com
 [SLACK] Posting 'Deploy new version' to channel #deployments
 ````
-</augment_code_snippet>
+
 
 You will see this pattern everywhere in real codebases:
 
@@ -1129,7 +1329,7 @@ class** (ABC).
 
 Example file: `oops/classes/abc_shape_example.py`.
 
-<augment_code_snippet path="oops/classes/abc_shape_example.py" mode="EXCERPT">
+
 ````python
 from abc import ABC, abstractmethod
 
@@ -1147,7 +1347,7 @@ class Square(Shape):
     def area(self) -> float:
         return self.side * self.side
 ````
-</augment_code_snippet>
+
 
 Key ideas:
 
@@ -1161,7 +1361,7 @@ Key ideas:
 The file also contains a `BadShape` example that forgets to implement
 `area()`:
 
-<augment_code_snippet path="oops/classes/abc_shape_example.py" mode="EXCERPT">
+
 ````python
 class BadShape(Shape):
     # No area() implementation here on purpose.
@@ -1170,11 +1370,11 @@ class BadShape(Shape):
 
 bad = BadShape()  # TypeError: Can't instantiate abstract class BadShape
 ````
-</augment_code_snippet>
+
 
 Contrast this with a plain base class **without** `ABC` / `@abstractmethod`:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 class Shape:
     def area(self) -> float:
@@ -1184,7 +1384,7 @@ class Shape:
 
 s = Shape()  # This succeeds, even though area() is not meaningful
 ````
-</augment_code_snippet>
+
 
 Using `ABC` + `@abstractmethod` tells Python (and your team):
 
@@ -1196,6 +1396,11 @@ depend on the abstract `Shape` interface, while concrete subclasses (`Square`,
 `Circle`, ...) provide the actual behaviour.
 
 ### 5.5 Abstract, generic services: `class Service(ABC, Generic[HandleT])`
+
+> **Advanced / optional:** This section is about **type hints and generics**.
+> You can safely skip it on a first read if you only care about core OOP
+> behaviour. Come back later when you are comfortable with sections 1–4 and the
+> earlier parts of 5.
 
 In real projects you will often see classes defined like:
 
@@ -1275,7 +1480,7 @@ File: `oops/classes/service_generic_example.py`.
 We define a generic abstract base class that manages some *resource handle* and
 two concrete services that choose different handle types:
 
-<augment_code_snippet path="oops/classes/service_generic_example.py" mode="EXCERPT">
+
 ````python
 HandleT = TypeVar("HandleT")
 
@@ -1295,7 +1500,7 @@ class FileService(Service[str]):
 class DatabaseService(Service[DBConnection]):
     ...  # start() returns DBConnection, stop() takes DBConnection
 ````
-</augment_code_snippet>
+
 
 Key ideas:
 
@@ -1330,7 +1535,7 @@ runtime.
 
 This version is perfectly valid Python:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 from abc import ABC, abstractmethod
 
@@ -1344,7 +1549,7 @@ class Service(ABC):
     def stop(self, handle):
         ...
 ````
-</augment_code_snippet>
+
 
 Python will happily run this. So why bother with generics and type hints?
 
@@ -1360,15 +1565,15 @@ Without generics:
   `stop()` expects.
 - You could accidentally write:
 
-  <augment_code_snippet mode="EXCERPT">
+  
   ````python
   s.stop(12345)  # maybe completely wrong type, but Python won't complain
   ````
-  </augment_code_snippet>
+  
 
 With generics, you encode that relationship in the type system:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 from typing import Generic, TypeVar
 
@@ -1385,7 +1590,7 @@ class Service(ABC, Generic[HandleT]):
     def stop(self, handle: HandleT) -> None:
         ...
 ````
-</augment_code_snippet>
+
 
 Now the class reads as:
 
@@ -1394,7 +1599,7 @@ Now the class reads as:
 
 When you create concrete subclasses, type checkers can enforce that:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 class FileService(Service[str]):
     def start(self) -> str:
@@ -1414,7 +1619,7 @@ class DatabaseService(Service[DBConnection]):
     def stop(self, handle: DBConnection) -> None:
         ...
 ````
-</augment_code_snippet>
+
 
 If you accidentally make them inconsistent (for example, `start()` returns
 `int` but `stop()` takes `str`), a type checker like `mypy` or an IDE will warn
@@ -1450,14 +1655,14 @@ Example file: `oops/classes/typevar_vs_any_example.py`.
 `HandleT = TypeVar("HandleT")` is **just a convention**. You can call it
 anything:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 PHandle = TypeVar("PHandle")
 ID = TypeVar("ID")
 T = TypeVar("T")
 MyType = TypeVar("MyType")
 ````
-</augment_code_snippet>
+
 
 All of these behave the same. People often choose names like:
 
@@ -1467,11 +1672,11 @@ All of these behave the same. People often choose names like:
 
 You could even write:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 Banana = TypeVar("Banana")
 ````
-</augment_code_snippet>
+
 
 It would **work**, but it would be confusing to humans reading the code. Names
 are for readability.
@@ -1483,7 +1688,7 @@ different things.
 
 **`Any` turns off type checking**:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 class AnyService(ABC):
     @abstractmethod
@@ -1494,7 +1699,7 @@ class AnyService(ABC):
     def stop(self, handle: Any) -> None:
         ...
 ````
-</augment_code_snippet>
+
 
 Here:
 
@@ -1508,7 +1713,7 @@ type safety.
 
 **`TypeVar` keeps track of one unknown, consistent type**:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 HandleT = TypeVar("HandleT")
 
@@ -1522,11 +1727,11 @@ class Service(ABC, Generic[HandleT]):
     def stop(self, handle: HandleT) -> None:
         ...
 ````
-</augment_code_snippet>
+
 
 Now subclasses **lock in** a specific type for `HandleT`:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 class FileService(Service[str]):
     def start(self) -> str:
@@ -1546,7 +1751,7 @@ class DatabaseService(Service[DBConnection]):
     def stop(self, handle: DBConnection) -> None:
         ...
 ````
-</augment_code_snippet>
+
 
 For `FileService`, `HandleT` is `str`. For `DatabaseService`, `HandleT` is
 `DBConnection`. A type checker will then report an error if you try something
@@ -1554,7 +1759,7 @@ like `file_service.stop(123)`.
 
 Another common pattern is a generic container:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 ItemT = TypeVar("ItemT")
 
@@ -1569,7 +1774,7 @@ class Box(Generic[ItemT]):
     def get(self) -> ItemT | None:
         return self._item
 ````
-</augment_code_snippet>
+
 
 If you create `b = Box[int]()` then, conceptually:
 
@@ -1604,7 +1809,7 @@ together so they all behave consistently once a concrete type is chosen.
 Sometimes a class needs **more than one** type parameter. A common pattern is a
 mapping type:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 from typing import Generic, TypeVar
 
@@ -1623,7 +1828,7 @@ class Dictionary(Generic[K, V]):
     def get(self, key: K) -> V:
         return self.data[key]
 ````
-</augment_code_snippet>
+
 
 Example file: `oops/classes/dictionary_generic_example.py`.
 
@@ -1653,7 +1858,7 @@ When you instantiate it, you plug in real types:
 
 For example:
 
-<augment_code_snippet path="oops/classes/dictionary_generic_example.py" mode="EXCERPT">
+
 ````python
 d1 = Dictionary[str, int]()
 d1.add("age", 25)        # OK
@@ -1668,7 +1873,7 @@ d3 = Dictionary[str, list[int]]()
 d3.add("scores", [10, 20, 30])      # OK
 # d3.add("scores", "not a list")     # type checker error: value must be list[int]
 ````
-</augment_code_snippet>
+
 
 So `K` and `V` are **templates**, not concrete types by themselves:
 
@@ -1697,11 +1902,11 @@ Sometimes you want to say:
 
 For that, Python lets you define a **constrained** `TypeVar`:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 T = TypeVar("T", A, B)
 ````
-</augment_code_snippet>
+
 
 Meaning:
 
@@ -1711,7 +1916,7 @@ Meaning:
 
 Applied to your example, you might write (assuming the proper imports):
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 from subprocess import Popen
 from typing import Any
@@ -1720,7 +1925,7 @@ import psutil
 
 HandleT = TypeVar("HandleT", Popen[Any], psutil.Process)
 ````
-</augment_code_snippet>
+
 
 This means:
 
@@ -1733,7 +1938,7 @@ This means:
 
 You might then use it in a generic service:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 HandleT = TypeVar("HandleT", Popen[Any], psutil.Process)
 
@@ -1745,13 +1950,13 @@ class ProcessService(Generic[HandleT]):
     def stop(self, handle: HandleT) -> None:
         ...
 ````
-</augment_code_snippet>
+
 
 Now subclasses must pick **one of the allowed types**:
 
 - ✅ Works:
 
-  <augment_code_snippet mode="EXCERPT">
+  
   ````python
   class PopenService(ProcessService[Popen[Any]]):
       ...
@@ -1760,16 +1965,15 @@ Now subclasses must pick **one of the allowed types**:
   class PsutilService(ProcessService[psutil.Process]):
       ...
   ````
-  </augment_code_snippet>
 
 - ❌ Not allowed (type checker error):
 
-  <augment_code_snippet mode="EXCERPT">
+  
   ````python
   class StringService(ProcessService[str]):
       ...  # str is not in {Popen[Any], psutil.Process}
   ````
-  </augment_code_snippet>
+  
 
 A type checker will complain that `str` is **not** one of the permitted
 options.
@@ -1778,11 +1982,11 @@ options.
 
 Sometimes you might see something like:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 HandleT = TypeVar("HandleT", "Popen[Any]", psutil.Process)
 ````
-</augment_code_snippet>
+
 
 Here `"Popen[Any]"` is a **string**, not the actual type object. In type
 annotations, strings are used as **forward references**:
@@ -1793,11 +1997,11 @@ annotations, strings are used as **forward references**:
 For `TypeVar` constraints, you normally pass the **actual types**, not strings.
 So the preferred version is:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 HandleT = TypeVar("HandleT", Popen[Any], psutil.Process)
 ````
-</augment_code_snippet>
+
 
 ##### A small runnable example (without external dependencies)
 
@@ -1806,7 +2010,7 @@ real `Popen` / `psutil.Process` so that the example runs everywhere:
 
 Example file: `oops/classes/process_service_constrained_typevar_example.py`.
 
-<augment_code_snippet path="oops/classes/process_service_constrained_typevar_example.py" mode="EXCERPT">
+
 ````python
 HandleT = TypeVar("HandleT", PopenHandle, PsutilProcessLike)
 
@@ -1820,11 +2024,11 @@ class ProcessService(ABC, Generic[HandleT]):
     def stop(self, handle: HandleT) -> None:
         ...
 ````
-</augment_code_snippet>
+
 
 Concrete services choose one of the allowed handle types:
 
-<augment_code_snippet path="oops/classes/process_service_constrained_typevar_example.py" mode="EXCERPT">
+
 ````python
 class PopenService(ProcessService[PopenHandle]):
     def start(self) -> PopenHandle:
@@ -1847,16 +2051,16 @@ class PsutilService(ProcessService[PsutilProcessLike]):
         print("Stopping:", handle)
         handle.kill()
 ````
-</augment_code_snippet>
+
 
 Trying to define:
 
-<augment_code_snippet path="oops/classes/process_service_constrained_typevar_example.py" mode="EXCERPT">
+
 ````python
 # class StringService(ProcessService[str]):
 #     ...  # type checker error: str not allowed here
 ````
-</augment_code_snippet>
+
 
 would be rejected by a type checker, because `str` is not in the allowed set
 `{PopenHandle, PsutilProcessLike}`.
@@ -1905,7 +2109,7 @@ In practice you almost always use the **parameterised form**:
 
 You *could* technically write:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 from typing import Generic
 
@@ -1913,7 +2117,7 @@ from typing import Generic
 class Weird(Generic):  # legal but not useful
     ...
 ````
-</augment_code_snippet>
+
 
 but this does **not** declare any type parameter, so type checkers have
 nothing to work with. It is effectively the same (for typing purposes) as just
@@ -1931,7 +2135,7 @@ checkers understand.
 
 When you write:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar
@@ -1947,7 +2151,7 @@ class Service(ABC, Generic[HandleT]):
     @abstractmethod
     def stop(self, handle: HandleT) -> None: ...
 ````
-</augment_code_snippet>
+
 
 you are doing two ordinary things at once:
 
@@ -1985,7 +2189,7 @@ Important mental model:
 
 You then use that specialised type when defining subclasses:
 
-<augment_code_snippet mode="EXCERPT">
+
 ````python
 class PopenService(Service[Popen[Any]]):
     ...  # here HandleT is effectively Popen[Any]
@@ -1994,7 +2198,7 @@ class PopenService(Service[Popen[Any]]):
 class ProcessService(Service[psutil.Process]):
     ...  # here HandleT is effectively psutil.Process
 ````
-</augment_code_snippet>
+
 
 For a type checker, this means:
 
@@ -2066,14 +2270,14 @@ Properties let you:
 
 ### 6.1. A small `Account` example
 
-Example file: `practice/oops/classes/encapsulation_property_example.py`
+Example file: `oops/classes/encapsulation_property_example.py`
 
 We model a tiny bank account:
 
 - Real value is stored in a "private" attribute `_balance`.
 - A `balance` property enforces the rule: balance cannot go negative.
 
-<augment_code_snippet path="practice/oops/classes/encapsulation_property_example.py" mode="EXCERPT">
+
 ````python
 class Account:
     """A simple bank account with encapsulated balance."""
@@ -2083,11 +2287,11 @@ class Account:
         self._balance = 0
         self.balance = balance
 ````
-</augment_code_snippet>
+
 
 The `balance` property controls access to `_balance`:
 
-<augment_code_snippet path="practice/oops/classes/encapsulation_property_example.py" mode="EXCERPT">
+
 ````python
     @property
     def balance(self) -> int:
@@ -2099,7 +2303,7 @@ The `balance` property controls access to `_balance`:
             raise ValueError("Balance cannot be negative")
         self._balance = value
 ````
-</augment_code_snippet>
+
 
 On the outside, code still just does `account.balance` and
 `account.balance = 123`, but under the hood we now have a single place to
@@ -2109,7 +2313,7 @@ validate and protect invariants.
 
 In the `__main__` block we create an account, deposit, and try to overdraw:
 
-<augment_code_snippet path="practice/oops/classes/encapsulation_property_example.py" mode="EXCERPT">
+
 ````python
 if __name__ == "__main__":
     account = Account("alice", balance=100)
@@ -2129,11 +2333,11 @@ if __name__ == "__main__":
     account.withdraw(50)
     print("Final balance:", account.balance)
 ````
-</augment_code_snippet>
+
 
 ### 6.3. Real output from the encapsulation example
 
-From inside `practice/oops/classes`:
+From inside `oops/classes`:
 
 ```bash
 python3 encapsulation_property_example.py
@@ -2141,7 +2345,7 @@ python3 encapsulation_property_example.py
 
 Output (also captured in the `output` variable in that file):
 
-<augment_code_snippet path="practice/oops/classes/encapsulation_property_example.py" mode="EXCERPT">
+
 ````text
 Owner: alice
 Initial balance: 100
@@ -2153,7 +2357,7 @@ Balance after failed withdraw: 150
 [WITHDRAW] -50
 Final balance: 100
 ````
-</augment_code_snippet>
+
 
 Properties are a key tool for **evolving** your classes safely:
 
@@ -2184,18 +2388,18 @@ Example file: `oops/classes/property_evolution_example.py`.
 
 "Before" – simple public attribute:
 
-<augment_code_snippet path="oops/classes/property_evolution_example.py" mode="EXCERPT">
+
 ````python
 class UserV1:
     def __init__(self, age: int) -> None:
         self.age = age  # direct public attribute
 ````
-</augment_code_snippet>
+
 
 "After" – same idea, but `age` is now a property with validation. Callers still
 write `user.age` and `user.age = value`:
 
-<augment_code_snippet path="oops/classes/property_evolution_example.py" mode="EXCERPT">
+
 ````python
 class UserV2:
     def __init__(self, age: int) -> None:
@@ -2212,7 +2416,7 @@ class UserV2:
             raise ValueError("Age cannot be negative")
         self._age = value
 ````
-</augment_code_snippet>
+
 
 In a real project you would just evolve the original `User` implementation, but
 the idea is the same: callers keep using `user.age` while you add
