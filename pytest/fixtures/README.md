@@ -127,6 +127,76 @@ def session_fixture():
     pass
 ```
 
+### 3.1. Scope vs. Visibility (`scope="class"` and standalone functions)
+
+> **Key idea**: A fixture with `scope="class"` can still be used by a
+> **standalone test function**.
+
+**Fixture scope does *not* restrict where a fixture can be used.**
+
+- It only controls **how long the fixture instance lives**.
+
+#### The key misunderstanding
+
+You might think:
+
+> *"class scope means it can only be used inside a class"*
+
+But in pytest, **scope ≠ visibility**.
+
+Fixture scope only answers:
+
+- *"How many times is this fixture created and destroyed?"*
+
+It does **not** answer:
+
+- *"Who is allowed to use this fixture?"*
+
+#### What `scope="class"` really means
+
+```python
+@pytest.fixture(scope="class")
+def get_class_db():
+    print("Opening DB connection")
+```
+
+This means:
+
+- **Create one fixture instance per test class**
+- Reuse that instance for **all tests within that class**
+
+But when a **function test** uses it:
+
+```python
+def test_sample_fixture(get_class_db):
+    ...
+```
+
+pytest treats the function itself as a **"class-like" scope unit** for this
+fixture. It will:
+
+- Create **one instance just for that test function**
+- Use it for that test
+- Then tear it down according to its scope rules
+
+Result: **No error, perfectly valid usage.**
+
+#### Why pytest allows this (design reason)
+
+Pytest fixtures are designed to be:
+
+- **Dependency injection**
+- **Decoupled from test structure**
+- **Designed for reuse**
+
+A fixture describes:
+
+- *"How to get a resource"*
+
+Not:
+
+- *"Who is allowed to use this resource"*
+
 ---
 
 ## 4. How Pytest Discovers and Runs Tests
@@ -645,6 +715,123 @@ def test_api_call(api_client):
     response = api_client.get("/users")
     assert response.status_code == 200
 ```
+
+### 6.3. Multiple Fixtures, Call Order, and `yield`
+
+Consider this example with two fixtures and a test class:
+
+```python
+import pytest
+
+"""
+@pytest.fixture(scope="class")
+def get_class_db():
+    print("Opening DB connection")
+"""
+
+@pytest.fixture()
+def get_class_db():
+    print("Opening DB connection 1")
+    yield
+    print("Closing DB connection 1")
+
+
+@pytest.fixture()
+def get_class_db_2():
+    print("Opening DB connection 2")
+
+
+class TestDb:
+    def test_connection(self, get_class_db, get_class_db_2):
+        print("inside test_connection")
+
+    def test_close(self, get_class_db):
+        print("inside test_close")
+```
+
+#### 1) Is fixture calling order left-to-right?
+
+Not guaranteed. In practice it often looks left-to-right, but pytest’s guarantee is:
+
+- A fixture runs **after all of its own dependencies are ready**.
+
+Between multiple **independent** fixtures requested by a test, pytest does **not**
+promise the order is the same as the argument list.
+
+So you should **never rely on argument order** for side effects (like
+“open DB 1 must run before DB 2”).
+
+If you need an order, **express it as a dependency**.
+
+#### 2) Why doesn’t `yield` “continue into the test” immediately?
+
+It does — but only **after pytest has finished setting up all fixtures needed for
+that test**.
+
+Think of `yield` fixtures like this:
+
+- Code **before** `yield` = **setup phase**
+- The `yield` point = “fixture is ready” (value returned to the test)
+- Code **after** `yield` = **teardown phase** (runs after the test finishes)
+
+For the test method:
+
+```python
+def test_connection(self, get_class_db, get_class_db_2):
+    print("inside test_connection")
+```
+
+pytest does roughly:
+
+1. Setup `get_class_db` (prints `"Opening DB connection 1"`, then stops at `yield`)
+2. Setup `get_class_db_2` (prints `"Opening DB connection 2"`)
+3. Run the test body (prints `"inside test_connection"`)
+4. Teardown in **reverse order** of setup for `yield` fixtures:
+   - `get_class_db` resumes **after** `yield` and prints `"Closing DB connection 1"`
+   - (`get_class_db_2` has no `yield`, so there’s no teardown)
+
+So it is expected that `get_class_db_2` runs before the test body, even though
+`get_class_db` already hit `yield`.
+
+#### 3) Enforcing an order with fixture dependencies
+
+If you want “DB 2 must be created **after** DB 1”, make `get_class_db_2`
+**depend on** `get_class_db`:
+
+```python
+@pytest.fixture()
+def get_class_db():
+    print("Opening DB connection 1")
+    yield
+    print("Closing DB connection 1")
+
+
+@pytest.fixture()
+def get_class_db_2(get_class_db):   # dependency enforces order
+    print("Opening DB connection 2")
+```
+
+Now pytest must do:
+
+- DB1 setup → DB2 setup → test → DB1 teardown.
+
+#### 4) Adding teardown for the second connection
+
+In the original example, `get_class_db_2` has no teardown. If it’s actually a
+“connection”, you probably want symmetric cleanup:
+
+```python
+@pytest.fixture()
+def get_class_db_2(get_class_db):
+    print("Opening DB connection 2")
+    yield
+    print("Closing DB connection 2")
+```
+
+Then teardown will be in reverse order of setup:
+
+- Close DB 2
+- Close DB 1
 
 ---
 
