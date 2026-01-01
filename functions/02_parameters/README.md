@@ -232,6 +232,57 @@ list1 = append_to_list_correct("apple")   # ['apple']
 list2 = append_to_list_correct("banana")  # ['banana'] - CORRECT!
 ```
 
+#### Concrete demo: same default list reused between calls
+
+You can see the shared-default behavior clearly in a small example:
+
+```python
+def append_to_list(fruit: str, items: list = []) -> list:
+    items.append(fruit)
+    return items
+
+
+p1 = append_to_list("apple", [10])
+print(f"p1 {p1}")
+
+p2 = append_to_list("orange", ["citrus", "tree"])
+print(f"p2 {p2}")
+
+p3 = append_to_list("mango")
+print(f"p3 {p3}")
+
+p4 = append_to_list("Guava")
+print(f"p4 {p4}")
+
+p5 = append_to_list(5)
+print(f"p5 {p5}")
+```
+
+Output:
+
+```text
+p1 [10, 'apple']
+p2 ['citrus', 'tree', 'orange']
+p3 ['mango']
+p4 ['mango', 'Guava']
+p5 ['mango', 'Guava', 5]
+```
+
+What’s happening?
+
+- When you pass your own list (`[10]` or `["citrus", "tree"]`), that list is used
+  and the default `[]` is **ignored**.
+- When you **omit** the `items` argument (`p3` and `p4`), both calls share the
+  **same default list object** created once at function definition time.
+- After `p3`, the default list is `['mango']`; after `p4`, it has become
+  `['mango', 'Guava']`, so both `p3` and `p4` refer to the same growing list.
+- The `fruit: str` type hint is **not enforced at runtime**: calling
+  `append_to_list(5)` still works and appends an `int`. A static type checker
+  (like `mypy`) would flag this, but Python itself does not.
+
+This is the same pitfall as `append_to_list_wrong` and `fn_list(lt: list = [])`
+above—just with a more realistic-looking example.
+
 ### 🔑 Key Takeaway
 
 **Never use mutable objects (list, dict, set) as default values!** Use `None` and create the mutable object inside the function.
@@ -628,6 +679,91 @@ def sum_numbers(*args: int) -> int:
 sum_numbers(1, 2, 3)           # 6
 sum_numbers(10, 20, 30, 40)    # 100
 sum_numbers()                  # 0 (empty tuple)
+```
+
+#### Another *args example: printing arbitrary values
+
+You can also use `*args` (or any other name) to accept **any number of
+positional arguments of any type** and inspect them one by one:
+
+```python
+from typing import Any
+
+
+def args(*ars: Any) -> None:
+    for i in ars:
+        print(f" i {i}")
+
+
+args(10, 14, 13, 45)
+args([1, 2, 3, 4], [4, 6, 9, 10])
+
+n1 = (100, 200, 300, 400)
+args(n1)
+
+n2 = (400, 500, 600, 700)
+args(*n2)
+```
+
+Output:
+
+```text
+ i 10
+ i 14
+ i 13
+ i 45
+ i [1, 2, 3, 4]
+ i [4, 6, 9, 10]
+ i (100, 200, 300, 400)
+ i 400
+ i 500
+ i 600
+ i 700
+```
+
+Explanation:
+
+- The parameter name `ars` is arbitrary – `*ars` works exactly like
+  `*args` – it collects all positional arguments into a **tuple**.
+- The type hint `Any` tells static type checkers that each element of `ars`
+  can be **any type** (int, list, tuple, etc.). Python itself does **no
+  runtime type checking** here.
+- In `args(10, 14, 13, 45)`, `ars` is `(10, 14, 13, 45)`.
+- In `args([1, 2, 3, 4], [4, 6, 9, 10])`, `ars` is a tuple with **two list
+  elements**: `([1, 2, 3, 4], [4, 6, 9, 10])`. The lists are not unpacked;
+  each list is a single argument.
+- In `args(n1)`, the entire tuple `n1` is passed as **one** positional
+  argument, so inside the function `ars == (n1,)`, i.e. a tuple whose only
+  element is the original tuple:
+
+  ```text
+  ars ───► ( (100, 200, 300, 400), )
+               ▲
+               └── n1
+  ```
+
+  The loop therefore prints the whole tuple in a single line:
+  `i (100, 200, 300, 400)`.
+
+- In `args(*n2)`, the leading `*` **unpacks** the tuple into **separate
+  positional arguments**. It is as if you had written `args(400, 500, 600,
+  700)`, so inside the function:
+
+  ```text
+  ars ───► (400, 500, 600, 700)
+  ```
+
+  The loop now sees four separate elements and prints four lines: `i 400`,
+  `i 500`, `i 600`, `i 700`.
+
+Visually, you can think of:
+
+```text
+args(n1)
+  ars = ( (100, 200, 300, 400), )   # tuple-of-one; element itself is a tuple
+
+args(*n2)
+  ars = (400, 500, 600, 700)        # tuple of four ints, unpacked
 ```
 
 ### 🔑 Key Points

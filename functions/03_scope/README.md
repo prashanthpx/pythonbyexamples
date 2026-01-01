@@ -186,6 +186,58 @@ def reassign():
     global_list = ["new", "list"]
 ```
 
+#### Example: modifying a global dict from inside a function
+
+The same rule applies to other mutable types like dictionaries:
+
+```python
+global_dict = {"name": "pk", "last": "kumar"}
+
+
+def mod_global() -> None:
+    # No 'global' keyword needed because we only change the CONTENTS
+    global_dict["name"] = "prashanth"
+
+
+print(f" global_dict {global_dict}")
+mod_global()
+print(f" mod global_dict {global_dict}")
+```
+
+Output:
+
+```text
+ global_dict {'name': 'pk', 'last': 'kumar'}
+ mod global_dict {'name': 'prashanth', 'last': 'kumar'}
+```
+
+Detailed explanation:
+
+- `global_dict` is created at **module level**, so it lives in **global
+  scope**.
+- Inside `mod_global`, we **do not reassign** `global_dict`; we only mutate the
+  existing dictionary by changing the value associated with the key
+  `"name"`.
+- Because we are modifying the **contents** of an existing global object (the
+  dictionary), Python does **not** require the `global` keyword.
+- Both `print` statements refer to the **same dictionary object** in memory:
+  the function call `mod_global()` has mutated it, so the second print shows
+  the updated value for `"name"`.
+
+If instead we tried to **rebind** `global_dict` inside the function, we would
+need `global`:
+
+```python
+def reset_global_dict() -> None:
+    global global_dict          # tell Python we mean the global name
+    global_dict = {"name": "x"}  # REASSIGN the global to a new dict
+```
+
+This mirrors the `global_list` example above and reinforces the key rule:
+
+- Mutating a global **object's contents** → no `global` needed.
+- Rebinding the **name** to a different object → `global` required.
+
 ### 🔑 Key Rule
 
 - **Modifying contents**: No `global` needed (for lists, dicts, etc.)
@@ -282,6 +334,81 @@ counter1()  # 1
 counter1()  # 2
 counter2()  # 101 (independent state!)
 ```
+
+### 4.4. Sharing nonlocal state across multiple inner functions
+
+You can also use `nonlocal` when **multiple inner functions** share and observe
+the same enclosing variable:
+
+```python
+global_var = 100
+
+
+def outer():
+    outer_var = 200
+    
+    def inner():
+        nonlocal outer_var
+        print(f" outer_var {outer_var}")
+        outer_var = 300
+        print_outer_var()
+    
+    def print_outer_var():
+        print(f" printing outside outer_var {outer_var}")
+        
+    return inner
+    
+
+counter = outer()
+counter()
+```
+
+Output:
+
+```text
+ outer_var 200
+ printing outside outer_var 300
+```
+
+Detailed explanation:
+
+- `outer_var` is defined inside `outer`, so it lives in the **enclosing scope**
+  for both `inner` and `print_outer_var`.
+- In `inner`, the line `nonlocal outer_var` tells Python: *"When I read or
+  assign to `outer_var` in this function, use the variable from the **enclosing
+  function** `outer`, not a new local name."*
+- The first `print` in `inner` sees the original value `200` from `outer`.
+- Then `outer_var = 300` **modifies the enclosing variable**, so now
+  `outer_var` in `outer` (and therefore in any inner function that reads it)
+  has the value `300`.
+- The call to `print_outer_var()` happens **after** the assignment. That
+  function does **not** need `nonlocal outer_var` because it only **reads** the
+  value; it doesn’t assign to it. When it runs, it prints
+  `printing outside outer_var 300`.
+
+You can visualize the scopes like this:
+
+```text
+global scope:
+  global_var = 100
+
+outer() call frame:
+  outer_var = 200  ───► later changed to 300 by inner()
+  inner           ┐
+  print_outer_var ┘  # both close over the same outer_var
+```
+
+And the timeline of execution:
+
+1. `counter = outer()` creates the closure and stores `inner`, with
+   `outer_var` initially `200` in its enclosing scope.
+2. `counter()` calls `inner()`:
+   - prints `outer_var 200`
+   - sets `outer_var = 300` in the enclosing scope
+   - calls `print_outer_var()`, which now sees `outer_var == 300`.
+
+This example shows how `nonlocal` lets you **share and update state** across
+multiple inner functions that all use the same enclosing variable.
 
 ### 💡 Use Cases
 
